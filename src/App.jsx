@@ -1,0 +1,155 @@
+import React, { useState, useEffect } from 'react'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { ThemeProvider, createTheme } from '@mui/material/styles'
+import CssBaseline from '@mui/material/CssBaseline'
+import { LocalizationProvider } from '@mui/x-date-pickers'
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
+import rtlPlugin from 'stylis-plugin-rtl'
+import { prefixer } from 'stylis'
+import { CacheProvider } from '@emotion/react'
+import createCache from '@emotion/cache'
+
+// import { supabase } from './services/supabase' // غیرفعال برای تست محلی
+import LoginPage from './pages/LoginPage'
+import Dashboard from './pages/Dashboard'
+import DrugManagement from './pages/DrugManagement'
+import ReceiptManagement from './pages/ReceiptManagement'
+import WarehouseManagement from './pages/WarehouseManagement'
+import Reports from './pages/Reports'
+import Settings from './pages/Settings'
+import Layout from './components/Layout'
+
+// ایجاد cache برای RTL
+const cacheRtl = createCache({
+  key: 'muirtl',
+  stylisPlugins: [prefixer, rtlPlugin],
+})
+
+// تم Material UI با پشتیبانی از RTL
+const theme = createTheme({
+  direction: 'rtl',
+  palette: {
+    primary: {
+      main: '#1976d2',
+      light: '#42a5f5',
+      dark: '#1565c0',
+    },
+    secondary: {
+      main: '#9c27b0',
+      light: '#ba68c8',
+      dark: '#7b1fa2',
+    },
+    background: {
+      default: '#f5f5f5',
+      paper: '#ffffff',
+    },
+  },
+  typography: {
+    fontFamily: 'Vazirmatn, Arial, sans-serif',
+    h1: {
+      fontSize: '2rem',
+      fontWeight: 600,
+    },
+    h2: {
+      fontSize: '1.75rem',
+      fontWeight: 600,
+    },
+    h3: {
+      fontSize: '1.5rem',
+      fontWeight: 600,
+    },
+    body1: {
+      fontSize: '1rem',
+      lineHeight: 1.6,
+    },
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: 8,
+          textTransform: 'none',
+        },
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          borderRadius: 12,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        },
+      },
+    },
+  },
+})
+
+function App() {
+  const [user, setUser] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    // بررسی وضعیت احراز هویت کاربر (شبیه‌سازی شده)
+    const checkAuth = () => {
+      // ابتدا بررسی localStorage برای شبیه‌سازی
+      const savedUser = localStorage.getItem('user')
+      if (savedUser) {
+        setUser(JSON.parse(savedUser))
+      }
+      setLoading(false)
+    }
+
+    // شبیه‌سازی تاخیر بارگذاری
+    setTimeout(checkAuth, 500)
+  }, [])
+
+  if (loading) {
+    return (
+      <CacheProvider value={cacheRtl}>
+        <ThemeProvider theme={theme}>
+          <CssBaseline />
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center', 
+            height: '100vh',
+            direction: 'rtl',
+            fontFamily: 'Vazirmatn, Arial, sans-serif'
+          }}>
+            <div>در حال بارگذاری...</div>
+          </div>
+        </ThemeProvider>
+      </CacheProvider>
+    )
+  }
+
+  return (
+    <CacheProvider value={cacheRtl}>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <LocalizationProvider dateAdapter={AdapterDayjs}>
+          <Router>
+            <div dir="rtl">
+              {!user ? (
+                <LoginPage />
+              ) : (
+                <Layout>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/drugs" element={<DrugManagement />} />
+                    <Route path="/receipts" element={<ReceiptManagement />} />
+                    <Route path="/warehouses" element={<WarehouseManagement />} />
+                    <Route path="/reports" element={<Reports />} />
+                    <Route path="/settings" element={<Settings />} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </Layout>
+              )}
+            </div>
+          </Router>
+        </LocalizationProvider>
+      </ThemeProvider>
+    </CacheProvider>
+  )
+}
+
+export default App
