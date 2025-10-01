@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import SMSSettings from '../components/SMSSettings'
 import {
   Box,
   Typography,
@@ -48,7 +49,8 @@ import {
   AdminPanelSettings as AdminIcon,
   People as PeopleIcon,
   Business as BusinessIcon,
-  Store as StoreIcon
+  Store as StoreIcon,
+  Sms as SmsIcon
 } from '@mui/icons-material'
 import AccessLevelManagement from '../components/AccessLevelManagement'
 import { SUPPLIERS } from '../data/systemData'
@@ -325,6 +327,11 @@ export default function Settings() {
           <Tab 
             label="تنظیمات سازمان" 
             icon={<BusinessIcon />} 
+            iconPosition="start"
+          />
+          <Tab 
+            label="تنظیمات پیامک" 
+            icon={<SmsIcon />} 
             iconPosition="start"
           />
         </Tabs>
@@ -954,6 +961,11 @@ export default function Settings() {
             </Card>
           </Grid>
         </Grid>
+      )}
+
+      {/* Tab 5: SMS Settings */}
+      {tabValue === 5 && (
+        <SMSSettings />
       )}
 
       {/* Dialog افزودن/ویرایش کاربر */}

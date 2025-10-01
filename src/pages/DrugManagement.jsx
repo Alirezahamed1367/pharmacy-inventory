@@ -13,6 +13,7 @@
 import React, { useState } from 'react'
 import Snackbar from '@mui/material/Snackbar'
 import MuiAlert from '@mui/material/Alert'
+import SMSService from '../services/smsService'
 import {
   Box,
   Typography,
@@ -180,7 +181,7 @@ export default function DrugManagement() {
 
 
 
-  const handleSave = () => {
+  const handleSave = async () => {
     console.log('FormData before validation:', formData)
     
     if (!validateForm()) {
@@ -210,8 +211,43 @@ export default function DrugManagement() {
       }
       setDrugs([...drugs, newDrug])
       setSnackbar({ open: true, message: 'داروی جدید با موفقیت اضافه شد', severity: 'success' })
+      
+      // ارسال پیامک اطلاع‌رسانی
+      await sendSMSNotification(newDrug)
     }
     handleCloseDialog()
+  }
+
+  // تابع ارسال پیامک
+  const sendSMSNotification = async (drugData) => {
+    try {
+      const smsConfig = JSON.parse(localStorage.getItem('smsConfig') || '{}')
+      
+      if (!smsConfig.enabled || !smsConfig.adminPhone) {
+        console.log('سیستم پیامک غیرفعال است یا شماره مدیر تنظیم نشده')
+        return
+      }
+
+      const smsService = new SMSService()
+      
+      // تنظیم مقادیر از localStorage
+      smsService.apiUrl = smsConfig.apiUrl
+      smsService.apiKey = smsConfig.apiKey
+      smsService.username = smsConfig.username
+      smsService.password = smsConfig.password
+      smsService.senderNumber = smsConfig.senderNumber
+      smsService.adminPhone = smsConfig.adminPhone
+
+      const result = await smsService.sendDrugRegistrationSMS(drugData)
+      
+      if (result.success) {
+        console.log('پیامک اطلاع‌رسانی با موفقیت ارسال شد')
+      } else {
+        console.error('خطا در ارسال پیامک:', result.error)
+      }
+    } catch (error) {
+      console.error('خطا در سیستم پیامک:', error)
+    }
   }
 
   const handleDelete = (drugId) => {
