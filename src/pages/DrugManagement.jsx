@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Paper,
   Typography,
@@ -59,32 +59,37 @@ const DrugManagement = () => {
   }, [])
 
   const loadData = async () => {
-    setLoading(true)
     try {
-      const drugsResult = await getDrugs()
-      if (drugsResult.error) {
-        setAlert({ type: 'error', message: drugsResult.error.message })
-      } else {
-        setDrugs(drugsResult.data || [])
+      const [drugsResult, warehousesResult] = await Promise.all([
+        getDrugs(),
+        supabase?.from('warehouses').select('*').eq('active', true)
+      ])
+
+      if (drugsResult.data) {
+        setDrugs(drugsResult.data)
       }
 
-      // Load warehouses
-      if (supabase) {
-        const { data: warehousesData, error: warehousesError } = await supabase
-          .from('warehouses')
-          .select('*')
-        
-        if (warehousesError) {
-          setAlert({ type: 'error', message: 'خطا در بارگذاری انبارها: ' + warehousesError.message })
-        } else {
-          setWarehouses(warehousesData || [])
-        }
+      if (warehousesResult?.data) {
+        setWarehouses(warehousesResult.data)
       }
     } catch (error) {
-      setAlert({ type: 'error', message: 'خطا در بارگذاری داده‌ها: ' + error.message })
-    } finally {
-      setLoading(false)
+      console.error('خطا در بارگذاری داده‌ها:', error)
+      setAlert({ type: 'error', message: 'خطا در بارگذاری داده‌ها' })
     }
+  }
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      category: '',
+      description: '',
+      price: '',
+      warehouse_id: '',
+      quantity: '',
+      expiry_date: '',
+      image_url: ''
+    })
+    setEditingDrug(null)
   }
 
   const handleSubmit = async () => {
@@ -137,32 +142,32 @@ const DrugManagement = () => {
   }
 
   const handleDelete = async (id) => {
-    if (!window.confirm('آیا از حذف این دارو اطمینان دارید؟')) return
-
-    setLoading(true)
-    try {
-      const result = await deleteDrug(id)
-      if (result.error) {
-        setAlert({ type: 'error', message: result.error.message })
-      } else {
-        setAlert({ type: 'success', message: 'دارو با موفقیت حذف شد' })
-        loadData()
+    if (window.confirm('آیا از حذف این دارو اطمینان دارید؟')) {
+      setLoading(true)
+      try {
+        const result = await deleteDrug(id)
+        if (result.error) {
+          setAlert({ type: 'error', message: result.error.message })
+        } else {
+          setAlert({ type: 'success', message: 'دارو با موفقیت حذف شد' })
+          loadData()
+        }
+      } catch (error) {
+        setAlert({ type: 'error', message: 'خطا در حذف دارو: ' + error.message })
+      } finally {
+        setLoading(false)
       }
-    } catch (error) {
-      setAlert({ type: 'error', message: 'خطا در حذف دارو: ' + error.message })
-    } finally {
-      setLoading(false)
     }
   }
 
   const handleImageUpload = async (file) => {
     try {
-      const result = await uploadImage(file, 'drug-images')
-      if (result.error) {
-        setAlert({ type: 'error', message: result.error.message })
-      } else {
-        setFormData(prev => ({ ...prev, image_url: result.data.path }))
+      const uploadResult = await uploadImage(file, 'drugs')
+      if (uploadResult.success) {
+        setFormData(prev => ({ ...prev, image_url: uploadResult.path }))
         setAlert({ type: 'success', message: 'تصویر با موفقیت آپلود شد' })
+      } else {
+        setAlert({ type: 'error', message: uploadResult.error || 'خطا در آپلود تصویر' })
       }
     } catch (error) {
       setAlert({ type: 'error', message: 'خطا در آپلود تصویر: ' + error.message })
@@ -176,26 +181,12 @@ const DrugManagement = () => {
 
   const getWarehouseName = (warehouseId) => {
     const warehouse = warehouses.find(w => w.id === warehouseId)
-    return warehouse ? warehouse.name : 'نامشخص'
-  }
-
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      category: '',
-      description: '',
-      price: '',
-      warehouse_id: '',
-      quantity: '',
-      expiry_date: '',
-      image_url: ''
-    })
-    setEditingDrug(null)
+    return warehouse ? warehouse.name : '-'
   }
 
   return (
     <Paper sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4" component="h1">
           مدیریت داروها
         </Typography>

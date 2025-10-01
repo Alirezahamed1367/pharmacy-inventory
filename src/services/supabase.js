@@ -438,10 +438,6 @@ export const updateDrug = async (id, drugData) => {
     return { error: { message: 'خطا در ویرایش دارو: ' + error.message } }
   }
 }
-  } catch (error) {
-    return { error: { message: 'خطا در ویرایش دارو: ' + error.message } }
-  }
-}
 
 // حذف دارو
 export const deleteDrug = async (id) => {
@@ -452,7 +448,7 @@ export const deleteDrug = async (id) => {
   try {
     const { error } = await supabase
       .from('drugs')
-      .update({ is_active: false })
+      .update({ active: false })
       .eq('id', id)
 
     return { error }
