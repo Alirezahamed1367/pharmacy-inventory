@@ -45,7 +45,7 @@ const menuItems = [
   { text: 'تنظیمات', path: '/settings', icon: <SettingsIcon /> },
 ]
 
-export default function Layout({ children }) {
+export default function Layout({ children, onLogout }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [anchorEl, setAnchorEl] = useState(null)
   const [changePasswordOpen, setChangePasswordOpen] = useState(false)
@@ -55,7 +55,7 @@ export default function Layout({ children }) {
   const location = useLocation()
 
   // دریافت اطلاعات کاربر فعلی
-  const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
+  const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}')
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen)
@@ -79,8 +79,9 @@ export default function Layout({ children }) {
   }
 
   const handleLogout = async () => {
-    localStorage.removeItem('user')
-    window.location.reload()
+    if (onLogout) {
+      onLogout()
+    }
     handleMenuClose()
   }
 
@@ -192,7 +193,7 @@ export default function Layout({ children }) {
                 <ListItemIcon>
                   <AccountCircle fontSize="small" />
                 </ListItemIcon>
-                {currentUser.name || currentUser.username}
+                {currentUser.full_name || currentUser.username}
               </MenuItem>
               <Divider />
               <MenuItem onClick={handleChangePasswordOpen}>

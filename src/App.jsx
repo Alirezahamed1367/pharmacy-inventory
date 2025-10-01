@@ -88,19 +88,45 @@ function App() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // بررسی وضعیت احراز هویت کاربر (شبیه‌سازی شده)
+    // بررسی وضعیت احراز هویت کاربر
     const checkAuth = () => {
-      // ابتدا بررسی localStorage برای شبیه‌سازی
-      const savedUser = localStorage.getItem('user')
+      // بررسی localStorage برای کاربر ورود کرده
+      const savedUser = localStorage.getItem('currentUser')
       if (savedUser) {
-        setUser(JSON.parse(savedUser))
+        try {
+          setUser(JSON.parse(savedUser))
+        } catch (error) {
+          // در صورت خطا در parsing، localStorage را پاک کن
+          localStorage.removeItem('currentUser')
+          localStorage.removeItem('userRole')
+        }
       }
       setLoading(false)
     }
 
-    // شبیه‌سازی تاخیر بارگذاری
-    setTimeout(checkAuth, 500)
+    checkAuth()
+
+    // Listen for storage changes (برای logout در tabs دیگر)
+    const handleStorageChange = (e) => {
+      if (e.key === 'currentUser') {
+        if (e.newValue) {
+          setUser(JSON.parse(e.newValue))
+        } else {
+          setUser(null)
+        }
+      }
+    }
+
+    window.addEventListener('storage', handleStorageChange)
+    return () => window.removeEventListener('storage', handleStorageChange)
   }, [])
+
+  // تابع خروج
+  const handleLogout = () => {
+    localStorage.removeItem('currentUser')
+    localStorage.removeItem('userRole')
+    setUser(null)
+  }
 
   if (loading) {
     return (
@@ -130,9 +156,9 @@ function App() {
           <Router>
             <div dir="rtl">
               {!user ? (
-                <LoginPage />
+                <LoginPage onLogin={setUser} />
               ) : (
-                <Layout>
+                <Layout onLogout={handleLogout}>
                   <Routes>
                     <Route path="/" element={<Dashboard />} />
                     <Route path="/drugs" element={<DrugManagement />} />

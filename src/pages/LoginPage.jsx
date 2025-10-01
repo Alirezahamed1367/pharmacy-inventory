@@ -25,7 +25,7 @@ import {
 } from '@mui/icons-material'
 import { signIn, supabase } from '../services/supabase'
 
-export default function LoginPage() {
+export default function LoginPage({ onLogin }) {
   const [formData, setFormData] = useState({
     username: '',
     password: ''
@@ -41,29 +41,25 @@ export default function LoginPage() {
       try {
         const { data, error } = await supabase
           .from('users')
-          .select('username, name, role')
-          .eq('active', true)
+          .select('username, full_name, role')
+          .eq('is_active', true)
         
         if (error) {
           console.error('خطا در بارگذاری کاربران:', error)
-          // اگر دیتابیس در دسترس نباشد، از کاربران پیش‌فرض استفاده کن
+          // اگر دیتابیس در دسترس نباشد، از کاربران دائمی استفاده کن
           setUsers([
-            { username: 'superadmin', name: 'سوپر ادمین', role: 'superadmin' },
-            { username: 'admin1', name: 'مدیر کل', role: 'admin' },
-            { username: 'manager1', name: 'مدیر انبار', role: 'manager' },
-            { username: 'operator1', name: 'کارمند', role: 'operator' }
+            { username: 'superadmin', full_name: 'علیرضا حامد (توسعه دهنده)', role: 'super_admin' },
+            { username: 'admin', full_name: 'مدیر سیستم', role: 'admin' }
           ])
         } else {
           setUsers(data || [])
         }
       } catch (err) {
         console.error('خطا در اتصال:', err)
-        // در صورت عدم اتصال، از کاربران پیش‌فرض استفاده کن
+        // در صورت عدم اتصال، از کاربران دائمی استفاده کن
         setUsers([
-          { username: 'superadmin', name: 'سوپر ادمین', role: 'superadmin' },
-          { username: 'admin1', name: 'مدیر کل', role: 'admin' },
-          { username: 'manager1', name: 'مدیر انبار', role: 'manager' },
-          { username: 'operator1', name: 'کارمند', role: 'operator' }
+          { username: 'superadmin', full_name: 'علیرضا حامد (توسعه دهنده)', role: 'super_admin' },
+          { username: 'admin', full_name: 'مدیر سیستم', role: 'admin' }
         ])
       }
     }
@@ -85,38 +81,44 @@ export default function LoginPage() {
     setError('')
 
     try {
-      // بررسی رمزهای آپدیت شده از localStorage
-      const savedPasswords = JSON.parse(localStorage.getItem('userPasswords') || '[]')
-      
-      // کاربران پیش‌فرض
-      let defaultUsers = [
-        { username: 'superadmin', password: 'A25893Aa', role: 'superadmin', name: 'سوپر ادمین' },
-        { username: 'admin1', password: '123456', role: 'admin', name: 'مدیر کل' },
-        { username: 'manager1', password: '123456', role: 'manager', name: 'مدیر انبار' },
-        { username: 'operator1', password: '123456', role: 'operator', name: 'کارمند' }
+      // کاربران دائمی سیستم (غیر قابل تغییر)
+      const permanentUsers = [
+        { username: 'superadmin', password: 'A25893Aa', role: 'super_admin', full_name: 'علیرضا حامد (توسعه دهنده)' },
+        { username: 'admin', password: 'password', role: 'admin', full_name: 'مدیر سیستم' }
       ]
 
-      // اگر رمزهای آپدیت شده وجود دارد، آنها را جایگزین کن
-      if (savedPasswords.length > 0) {
-        defaultUsers = defaultUsers.map(defaultUser => {
-          const updatedUser = savedPasswords.find(u => u.username === defaultUser.username)
-          return updatedUser ? { ...defaultUser, password: updatedUser.password } : defaultUser
-        })
-      }
-
-      const foundUser = defaultUsers.find(u => 
-        u.username === formData.username && u.password === formData.password
-      )
-
-      if (foundUser) {
-        localStorage.setItem('user', JSON.stringify({
-          username: foundUser.username,
-          role: foundUser.role,
-          name: foundUser.name
-        }))
-        window.location.reload()
+      // بررسی اعتبار کاربر
+      const user = permanentUsers.find(u => u.username === formData.username && u.password === formData.password)
+      
+      if (!user) {
+        // اگر کاربر در لیست دائمی نبود، از دیتابیس بررسی کن
+        const result = await signIn(formData.username, formData.password)
+        if (result.error) {
+          setError('نام کاربری یا رمز عبور اشتباه است')
+          return
+        }
+        
+        // ذخیره اطلاعات کاربر در localStorage
+        localStorage.setItem('currentUser', JSON.stringify(result.user))
+        localStorage.setItem('userRole', result.user.role)
+        
+        // اطلاع به App component
+        onLogin(result.user)
       } else {
-        setError('نام کاربری یا رمز عبور اشتباه است')
+        // ورود کاربر دائمی
+        const userInfo = {
+          id: user.username === 'superadmin' ? '00000000-0000-0000-0000-000000000001' : '00000000-0000-0000-0000-000000000002',
+          username: user.username,
+          full_name: user.full_name,
+          role: user.role,
+          is_permanent: true
+        }
+        
+        localStorage.setItem('currentUser', JSON.stringify(userInfo))
+        localStorage.setItem('userRole', user.role)
+        
+        // اطلاع به App component
+        onLogin(userInfo)
       }
 
     } catch (err) {
@@ -193,7 +195,7 @@ export default function LoginPage() {
                       <MenuItem key={user.username} value={user.username}>
                         <Box sx={{ display: 'flex', flexDirection: 'column' }}>
                           <Typography variant="body2" fontWeight="bold">
-                            {user.name}
+                            {user.full_name}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
                             {user.username} - {user.role}

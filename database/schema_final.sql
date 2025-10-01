@@ -240,10 +240,13 @@ LEFT JOIN public.users u ON dm.user_id = u.id
 ORDER BY dm.created_at DESC;
 
 -- =====================================================
--- درج کاربر پیش‌فرض (Super Admin)
+-- درج کاربران پیش‌فرض سیستم
 -- =====================================================
 INSERT INTO public.users (username, password, full_name, role) VALUES
-('superadmin', 'A25893Aa', 'مدیر کل سیستم', 'superadmin');
+('superadmin', 'A25893Aa', 'مدیر کل سیستم', 'superadmin'),
+('admin1', '123456', 'مدیر کل', 'admin'),
+('manager1', '123456', 'مدیر انبار', 'manager'),
+('operator1', '123456', 'کارمند', 'operator');
 
 -- =====================================================
 -- درج دسته‌بندی‌های پیش‌فرض
