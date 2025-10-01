@@ -26,13 +26,11 @@ import {
   Inventory as InventoryIcon,
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../services/supabase'
 import dayjs from 'dayjs'
 import 'dayjs/locale/fa'
 
 dayjs.locale('fa')
-
-
-
 
 export default function Dashboard() {
   const [data, setData] = useState({
@@ -41,13 +39,83 @@ export default function Dashboard() {
     expiringDrugs: [],
   })
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const navigate = useNavigate()
 
   useEffect(() => {
-    // TODO: دریافت داده‌های واقعی از دیتابیس (Supabase)
-    // setData({ ... })
-    setLoading(false)
+    fetchDashboardData()
   }, [])
+
+  const fetchDashboardData = async () => {
+    setLoading(true)
+    try {
+      // دریافت تعداد کل داروها
+      const { data: drugsData, error: drugsError } = await supabase
+        .from('drugs')
+        .select('id')
+        .eq('active', true)
+
+      if (drugsError) throw drugsError
+
+      // دریافت تعداد کل انبارها
+      const { data: warehousesData, error: warehousesError } = await supabase
+        .from('warehouses')
+        .select('id')
+        .eq('active', true)
+
+      if (warehousesError) throw warehousesError
+
+      // دریافت داروهای در حال انقضا از view
+      const { data: inventoryData, error: inventoryError } = await supabase
+        .from('inventory_view')
+        .select('*')
+
+      if (inventoryError) throw inventoryError
+
+      // محاسبه داروهای منقضی و در حال انقضا
+      const currentDate = new Date()
+      const expiringSoon = inventoryData?.filter(item => {
+        if (!item.expiry_date) return false
+        const expiryDate = new Date(item.expiry_date)
+        const diffTime = expiryDate - currentDate
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+        return diffDays > 0 && diffDays <= 30
+      }) || []
+
+      const expired = inventoryData?.filter(item => {
+        if (!item.expiry_date) return false
+        const expiryDate = new Date(item.expiry_date)
+        return expiryDate < currentDate
+      }) || []
+
+      // دریافت فعالیت‌های اخیر
+      const { data: movementsData, error: movementsError } = await supabase
+        .from('movements_view')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(5)
+
+      if (movementsError) throw movementsError
+
+      setData({
+        stats: {
+          totalDrugs: drugsData?.length || 0,
+          totalWarehouses: warehousesData?.length || 0,
+          expiringSoon: expiringSoon.length,
+          expired: expired.length
+        },
+        recentActivities: movementsData || [],
+        expiringDrugs: expiringSoon.slice(0, 5) // نمایش 5 مورد اول
+      })
+
+      setError(null)
+    } catch (err) {
+      console.error('خطا در دریافت داده‌های داشبورد:', err)
+      setError('خطا در دریافت اطلاعات داشبورد')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleQuickAction = (action) => {
     switch (action) {
@@ -147,6 +215,18 @@ export default function Dashboard() {
           خوش آمدید! خلاصه‌ای از وضعیت کنونی سیستم انبارداری را مشاهده کنید.
         </Typography>
       </Box>
+
+      {/* Error Alert */}
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <LinearProgress sx={{ mb: 3 }} />
+      )}
 
       {/* Stats Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>

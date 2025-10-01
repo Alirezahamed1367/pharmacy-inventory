@@ -154,10 +154,8 @@ export default function TransferDialog({
         return
       }
     } else if (type === "receipt") {
-      if (!formData.supplier || !formData.warehouse) {
-        alert('لطفاً تامین‌کننده و انبار را انتخاب کنید')
-        return
-      }
+      // برای رسید کالا فقط بررسی اقلام کافی است
+      // warehouse و supplier اختیاری هستند
     }
 
     // محاسبه ارزش کل
@@ -295,27 +293,6 @@ export default function TransferDialog({
                 />
               </Grid>
               <Grid item xs={12} sm={6} md={4}></Grid>
-              <Grid item xs={12} sm={6} md={6}>
-                <SupplierSelect
-                  value={formData.supplier}
-                  onChange={(newValue) => setFormData({ ...formData, supplier: newValue })}
-                  suppliers={suppliers}
-                  label="تامین‌کننده"
-                  required
-                  size="medium"
-                />
-              </Grid>
-              <Grid item xs={12} sm={6} md={6}>
-                <WarehouseSelect
-                  value={formData.warehouse}
-                  onChange={(newValue) => setFormData({ ...formData, warehouse: newValue })}
-                  warehouses={warehouses}
-                  label="انبار مقصد"
-                  excludeTransit={true}
-                  required
-                  size="medium"
-                />
-              </Grid>
             </>
           )}
 

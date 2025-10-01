@@ -76,7 +76,7 @@ export default function WarehouseManagement() {
       // مسئولان انبار (کاربران با نقش manager)
       const { data: managersData, error: managersError } = await supabase
         .from('users')
-        .select('id, name, role, phone')
+        .select('id, full_name, role, phone')
         .eq('role', 'manager')
       if (managersError) throw managersError
       setManagers(managersData || [])

@@ -598,10 +598,10 @@ export const ManagerSelect = ({
   return (
     <Autocomplete
       options={managers}
-      getOptionLabel={(option) => `${option.name} - ${option.position}`}
-      value={managers.find(manager => manager.name === value) || null}
+      getOptionLabel={(option) => `${option.full_name} - ${option.role}`}
+      value={managers.find(manager => manager.full_name === value) || null}
       onChange={(event, newValue) => {
-        onChange(newValue ? newValue.name : '')
+        onChange(newValue ? newValue.full_name : '')
       }}
       renderInput={(params) => (
         <TextField
@@ -620,10 +620,10 @@ export const ManagerSelect = ({
             <PersonIcon sx={{ color: 'primary.main' }} />
             <Box sx={{ flex: 1 }}>
               <Typography variant="body1" fontWeight="bold">
-                {option.name}
+                {option.full_name}
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                {option.position} - {option.phone}
+                {option.role} - {option.phone}
               </Typography>
             </Box>
           </Box>
