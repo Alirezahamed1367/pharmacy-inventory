@@ -237,19 +237,71 @@ export const getDrugs = async () => {
   }
 
   try {
+    // Get drugs with their inventory information from the view
     const { data, error } = await supabase
-      .from('drugs')
-      .select(`
-        *,
-        warehouses (
-          id,
-          name
-        )
-      `)
-      .eq('is_active', true)
-      .order('name')
+      .from('inventory_view')
+      .select('*')
+      .order('drug_name')
 
-    return { data: data || [], error }
+    // If the view doesn't exist yet, fall back to joining tables manually
+    if (error && error.message.includes('does not exist')) {
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('drugs')
+        .select(`
+          *,
+          warehouse_inventory (
+            id,
+            warehouse_id,
+            quantity,
+            unit_cost,
+            expire_date,
+            warehouses (
+              id,
+              name
+            )
+          )
+        `)
+        .eq('active', true)
+        .order('name')
+
+      // Transform the data to match expected format
+      const transformedData = fallbackData?.map(drug => {
+        const inventory = drug.warehouse_inventory?.[0] || {}
+        return {
+          ...drug,
+          warehouse_id: inventory.warehouse_id,
+          warehouse_name: inventory.warehouses?.name,
+          quantity: inventory.quantity || 0,
+          expiry_date: inventory.expire_date,
+          price: drug.unit_price
+        }
+      }) || []
+
+      return { data: transformedData, error: fallbackError }
+    }
+
+    // Transform view data to match expected format
+    const transformedData = data?.map(item => ({
+      id: item.id,
+      name: item.drug_name,
+      generic_name: item.generic_name,
+      description: item.description,
+      dosage: item.dosage,
+      form: item.form,
+      manufacturer: item.manufacturer,
+      category: item.category_name || 'عمومی',
+      image_url: item.image_url,
+      barcode: item.barcode,
+      warehouse_id: item.warehouse_id,
+      warehouse_name: item.warehouse_name,
+      quantity: item.quantity || 0,
+      expiry_date: item.expire_date,
+      price: item.unit_cost,
+      unit_price: item.unit_cost,
+      active: true
+    })) || []
+
+    return { data: transformedData, error }
   } catch (error) {
     return { data: [], error: { message: 'خطا در دریافت داروها: ' + error.message } }
   }
@@ -262,17 +314,51 @@ export const addDrug = async (drugData) => {
   }
 
   try {
-    const { data, error } = await supabase
+    // Insert drug into drugs table
+    const { data: drugResult, error: drugError } = await supabase
       .from('drugs')
       .insert([{
-        ...drugData,
-        price: drugData.price ? parseFloat(drugData.price) : null,
-        quantity: drugData.quantity ? parseInt(drugData.quantity) : 0,
-        created_by: getCurrentUserId()
+        name: drugData.name,
+        generic_name: drugData.generic_name,
+        description: drugData.description,
+        dosage: drugData.dosage,
+        form: drugData.form,
+        manufacturer: drugData.manufacturer,
+        features: drugData.features,
+        image_url: drugData.image_url,
+        barcode: drugData.barcode,
+        min_stock_level: drugData.min_stock_level || 0,
+        max_stock_level: drugData.max_stock_level || 1000,
+        unit_price: drugData.price ? parseFloat(drugData.price) : 0,
+        active: true
       }])
       .select()
 
-    return { data: data?.[0], error }
+    if (drugError) {
+      return { error: drugError }
+    }
+
+    // If warehouse_id and quantity are provided, add to inventory
+    if (drugData.warehouse_id && drugData.quantity) {
+      const { error: inventoryError } = await supabase
+        .from('warehouse_inventory')
+        .insert([{
+          warehouse_id: drugData.warehouse_id,
+          drug_id: drugResult[0].id,
+          batch_number: drugData.batch_number || 'BATCH-' + Date.now(),
+          quantity: parseInt(drugData.quantity) || 0,
+          unit_cost: drugData.price ? parseFloat(drugData.price) : 0,
+          manufacture_date: drugData.manufacture_date || null,
+          expire_date: drugData.expiry_date || null
+        }])
+
+      if (inventoryError) {
+        // If inventory insert fails, we might want to delete the drug too
+        console.error('خطا در افزودن به موجودی:', inventoryError)
+      }
+    }
+
+    return { data: drugResult[0], error: null }
   } catch (error) {
     return { error: { message: 'خطا در افزودن دارو: ' + error.message } }
   }
@@ -285,18 +371,73 @@ export const updateDrug = async (id, drugData) => {
   }
 
   try {
-    const { data, error } = await supabase
+    // Update drug in drugs table
+    const { data: drugResult, error: drugError } = await supabase
       .from('drugs')
       .update({
-        ...drugData,
-        price: drugData.price ? parseFloat(drugData.price) : null,
-        quantity: drugData.quantity ? parseInt(drugData.quantity) : 0,
+        name: drugData.name,
+        generic_name: drugData.generic_name,
+        description: drugData.description,
+        dosage: drugData.dosage,
+        form: drugData.form,
+        manufacturer: drugData.manufacturer,
+        features: drugData.features,
+        image_url: drugData.image_url,
+        barcode: drugData.barcode,
+        min_stock_level: drugData.min_stock_level || 0,
+        max_stock_level: drugData.max_stock_level || 1000,
+        unit_price: drugData.price ? parseFloat(drugData.price) : 0,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
       .select()
 
-    return { data: data?.[0], error }
+    if (drugError) {
+      return { error: drugError }
+    }
+
+    // Update inventory if warehouse_id and quantity are provided
+    if (drugData.warehouse_id && drugData.quantity !== undefined) {
+      // Check if inventory record exists
+      const { data: existingInventory } = await supabase
+        .from('warehouse_inventory')
+        .select('*')
+        .eq('drug_id', id)
+        .eq('warehouse_id', drugData.warehouse_id)
+        .single()
+
+      if (existingInventory) {
+        // Update existing inventory
+        await supabase
+          .from('warehouse_inventory')
+          .update({
+            quantity: parseInt(drugData.quantity) || 0,
+            unit_cost: drugData.price ? parseFloat(drugData.price) : 0,
+            expire_date: drugData.expiry_date || null,
+            last_updated: new Date().toISOString()
+          })
+          .eq('drug_id', id)
+          .eq('warehouse_id', drugData.warehouse_id)
+      } else {
+        // Create new inventory record
+        await supabase
+          .from('warehouse_inventory')
+          .insert([{
+            warehouse_id: drugData.warehouse_id,
+            drug_id: id,
+            batch_number: drugData.batch_number || 'BATCH-' + Date.now(),
+            quantity: parseInt(drugData.quantity) || 0,
+            unit_cost: drugData.price ? parseFloat(drugData.price) : 0,
+            expire_date: drugData.expiry_date || null
+          }])
+      }
+    }
+
+    return { data: drugResult[0], error: null }
+  } catch (error) {
+    return { error: { message: 'خطا در ویرایش دارو: ' + error.message } }
+  }
+}
   } catch (error) {
     return { error: { message: 'خطا در ویرایش دارو: ' + error.message } }
   }

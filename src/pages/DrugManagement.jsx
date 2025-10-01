@@ -245,12 +245,47 @@ const DrugManagement = () => {
                   {drug.expiry_date ? new Date(drug.expiry_date).toLocaleDateString('fa-IR') : '-'}
                 </TableCell>
                 <TableCell>
-                  {drug.image_url && (
-                    <IconButton
+                  {drug.image_url ? (
+                    <Box
+                      sx={{
+                        position: 'relative',
+                        display: 'inline-block',
+                        cursor: 'pointer'
+                      }}
                       onClick={() => handleViewImage(getImageUrl(drug.image_url))}
-                      size="small"
                     >
-                      <ImageIcon />
+                      <img
+                        src={getImageUrl(drug.image_url)}
+                        alt={drug.name}
+                        style={{
+                          width: '40px',
+                          height: '40px',
+                          objectFit: 'cover',
+                          borderRadius: '4px',
+                          border: '1px solid #ddd',
+                          transition: 'transform 0.2s ease-in-out'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.target.style.transform = 'scale(2.5)'
+                          e.target.style.zIndex = '1000'
+                          e.target.style.position = 'relative'
+                          e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.3)'
+                        }}
+                        onMouseLeave={(e) => {
+                          e.target.style.transform = 'scale(1)'
+                          e.target.style.zIndex = 'auto'
+                          e.target.style.position = 'static'
+                          e.target.style.boxShadow = 'none'
+                        }}
+                      />
+                    </Box>
+                  ) : (
+                    <IconButton
+                      onClick={() => handleViewImage(null)}
+                      size="small"
+                      disabled
+                    >
+                      <ImageIcon color="disabled" />
                     </IconButton>
                   )}
                 </TableCell>
