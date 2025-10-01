@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Box,
   Typography,
@@ -29,129 +29,158 @@ import {
 } from '@mui/icons-material'
 import ReceiptConfirmationDialog from '../components/ReceiptConfirmationDialog'
 import TransferDialog from '../components/TransferDialog'
-import { DRUGS_DATABASE, SUPPLIERS, WAREHOUSES, UNITS, getDrugsSortedByExpiry } from '../data/systemData'
+import { supabase } from '../services/supabase'
+import { DrugSelect, SupplierSelect, WarehouseSelect, UnitSelect } from '../components/DropdownSelects'
 
-// داده‌های نمونه رسیدها
-const sampleReceipts = [
-  {
-    id: 1,
-    receiptNumber: 'R-1404-001',
-    supplier: SUPPLIERS[0], // شرکت داروسازی سینا
-    date: '1404/07/01',
-    warehouse: WAREHOUSES[0], // انبار مرکزی
-    destinationWarehouse: WAREHOUSES[0],
-    status: 'received', // received, pending, in_transit
-    items: [
-      { 
-        id: 1,
-        drug: DRUGS_DATABASE[0], // استامینوفن 500mg با تاریخ انقضا
-        quantity: 100, 
-        unit: UNITS[0], // جعبه
-        price: 15000 
-      },
-      { 
-        id: 2,
-        drug: DRUGS_DATABASE[3], // ایبوپروفن 400mg
-        quantity: 50, 
-        unit: UNITS[0], 
-        price: 25000 
-      },
-    ],
-    totalValue: 2750000,
-  },
-  {
-    id: 2,
-    receiptNumber: 'R-1404-002',
-    supplier: SUPPLIERS[1], // شرکت طب داری
-    date: '1404/07/02',
-    warehouse: WAREHOUSES[5], // انبار کالا در راه
-    destinationWarehouse: WAREHOUSES[1], // انبار شعبه شرق
-    status: 'in_transit',
-    items: [
-      { 
-        id: 3,
-        drug: DRUGS_DATABASE[5], // پنی‌سیلین 250mg
-        quantity: 75, 
-        unit: UNITS[1], // عدد
-        price: 12000 
-      },
-    ],
-    totalValue: 900000,
-  },
-]
-
-export default function ReceiptManagement() {
-  const [receipts, setReceipts] = useState(sampleReceipts)
+const ReceiptManagement = () => {
+  const [receipts, setReceipts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [openTransferDialog, setOpenTransferDialog] = useState(false)
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false)
   const [selectedReceipt, setSelectedReceipt] = useState(null)
   const [editingReceipt, setEditingReceipt] = useState(null)
+  const [drugs, setDrugs] = useState([])
+  const [warehouses, setWarehouses] = useState([])
+  const [suppliers, setSuppliers] = useState([])
+  const [formLoading, setFormLoading] = useState(false)
+  const [formError, setFormError] = useState(null)
 
+  // دریافت داده‌های اولیه
+  useEffect(() => {
+    fetchAll()
+  }, [])
+
+  const fetchAll = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      // دریافت رسیدها
+      const { data: receiptsData, error: receiptsError } = await supabase
+        .from('movements_view')
+        .select('*')
+        .eq('movement_type', 'entry')
+        .order('movement_date', { ascending: false })
+      if (receiptsError) throw receiptsError
+      setReceipts(receiptsData || [])
+
+      // دریافت داروها
+      const { data: drugsData, error: drugsError } = await supabase
+        .from('drugs')
+        .select('*')
+        .eq('active', true)
+        .order('name')
+      if (drugsError) throw drugsError
+      setDrugs(drugsData || [])
+
+      // دریافت انبارها
+      const { data: warehousesData, error: warehousesError } = await supabase
+        .from('warehouses')
+        .select('*')
+        .eq('active', true)
+        .order('name')
+      if (warehousesError) throw warehousesError
+      setWarehouses(warehousesData || [])
+
+      // دریافت تامین‌کنندگان (از جدول system_settings یا یک جدول suppliers)
+      const { data: suppliersData, error: suppliersError } = await supabase
+        .from('system_settings')
+        .select('*')
+        .eq('setting_key', 'suppliers')
+      if (suppliersError) throw suppliersError
+      let suppliersList = []
+      if (suppliersData && suppliersData.length > 0) {
+        try {
+          suppliersList = JSON.parse(suppliersData[0].setting_value)
+        } catch {}
+      }
+      setSuppliers(suppliersList)
+    } catch (err) {
+      setError(err.message || 'خطا در دریافت داده‌ها')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // باز کردن دیالوگ افزودن/ویرایش
   const handleOpenDialog = (receipt = null) => {
     setEditingReceipt(receipt)
     setOpenTransferDialog(true)
   }
 
+  // بستن دیالوگ
   const handleCloseDialog = () => {
     setOpenTransferDialog(false)
     setEditingReceipt(null)
+    setFormError(null)
   }
 
-  const handleSaveReceipt = (receiptData) => {
-    if (editingReceipt) {
-      // ویرایش رسید موجود
-      setReceipts(receipts.map(receipt =>
-        receipt.id === editingReceipt.id
-          ? { ...receipt, ...receiptData, id: editingReceipt.id }
-          : receipt
-      ))
-    } else {
-      // افزودن رسید جدید
-      const newReceipt = {
-        id: Math.max(...receipts.map(r => r.id), 0) + 1,
-        ...receiptData,
-        date: new Date().toLocaleDateString('fa-IR'),
-        status: 'pending'
+  // افزودن یا ویرایش رسید
+  const handleSaveReceipt = async (receiptData) => {
+    setFormLoading(true)
+    setFormError(null)
+    try {
+      let result
+      if (editingReceipt) {
+        // ویرایش
+        result = await supabase
+          .from('drug_movements')
+          .update({
+            ...receiptData,
+            movement_type: 'entry',
+          })
+          .eq('id', editingReceipt.id)
+        if (result.error) throw result.error
+      } else {
+        // افزودن
+        result = await supabase
+          .from('drug_movements')
+          .insert([{ ...receiptData, movement_type: 'entry' }])
+        if (result.error) throw result.error
       }
-      setReceipts([...receipts, newReceipt])
+      handleCloseDialog()
+      fetchAll()
+    } catch (err) {
+      setFormError(err.message || 'خطا در ذخیره رسید')
+    } finally {
+      setFormLoading(false)
     }
   }
 
-  const handleConfirmReceipt = (receiptId) => {
-    const receipt = receipts.find(r => r.id === receiptId);
-    if (receipt) {
-      setSelectedReceipt({
-        ...receipt,
-        items: receipt.items.map(item => ({
-          ...item,
-          id: item.id || Math.random(),
-          drugName: item.drug?.name || item.drug,
-          sentQuantity: item.quantity,
-          unitPrice: item.price,
-          expiryDate: item.drug?.expiryDate
-        }))
-      });
-      setOpenConfirmDialog(true);
+  // حذف یا لغو رسید
+  const handleDeleteReceipt = async (receiptId) => {
+    if (!window.confirm('آیا از حذف این رسید مطمئن هستید؟')) return
+    setFormLoading(true)
+    setFormError(null)
+    try {
+      const { error } = await supabase
+        .from('drug_movements')
+        .delete()
+        .eq('id', receiptId)
+      if (error) throw error
+      fetchAll()
+    } catch (err) {
+      setFormError(err.message || 'خطا در حذف رسید')
+    } finally {
+      setFormLoading(false)
     }
   }
 
-  const handleConfirmReceiptSubmit = (confirmationData) => {
-    setReceipts(receipts.map(receipt =>
-      receipt.id === confirmationData.receiptId
-        ? {
-          ...receipt,
-          status: confirmationData.status === 'complete' ? 'received' : 'partial_received',
-          warehouse: receipt.destinationWarehouse || receipt.warehouse,
-          confirmationData: confirmationData,
-          receivedDate: new Date().toLocaleDateString('fa-IR')
-        }
-        : receipt
-    ));
-
-    // Handle transit items (items with shortage)
-    if (confirmationData.transitItems.length > 0) {
-      console.log('Items remaining in transit:', confirmationData.transitItems);
-      // Here you would typically update a separate transit inventory
+  // تایید رسید (مثلاً تغییر وضعیت)
+  const handleConfirmReceipt = async (receiptId) => {
+    setFormLoading(true)
+    setFormError(null)
+    try {
+      const { error } = await supabase
+        .from('drug_movements')
+        .update({ status: 'received' })
+        .eq('id', receiptId)
+      if (error) throw error
+      fetchAll()
+    } catch (err) {
+      setFormError(err.message || 'خطا در تایید رسید')
+    } finally {
+      setFormLoading(false)
     }
   }
 
@@ -197,7 +226,11 @@ export default function ReceiptManagement() {
         </Button>
       </Box>
 
-      {/* Summary Cards */}
+  {/* وضعیت بارگذاری و خطا */}
+  {loading && <Alert severity="info">در حال بارگذاری رسیدها...</Alert>}
+  {error && <Alert severity="error">{error}</Alert>}
+
+  {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} md={3}>
           <Card sx={{ bgcolor: 'success.light', color: 'success.contrastText' }}>
@@ -251,6 +284,7 @@ export default function ReceiptManagement() {
           <Typography variant="h6" component="h2" gutterBottom fontWeight="bold">
             لیست رسیدها ({receipts.length})
           </Typography>
+          {formError && <Alert severity="error">{formError}</Alert>}
           <TableContainer component={Paper} sx={{ mt: 2 }}>
             <Table>
               <TableHead>
@@ -259,7 +293,6 @@ export default function ReceiptManagement() {
                   <TableCell>تامین‌کننده</TableCell>
                   <TableCell>تاریخ</TableCell>
                   <TableCell>انبار</TableCell>
-                  <TableCell>ارزش کل</TableCell>
                   <TableCell>وضعیت</TableCell>
                   <TableCell align="center">عملیات</TableCell>
                 </TableRow>
@@ -269,30 +302,12 @@ export default function ReceiptManagement() {
                   <TableRow key={receipt.id}>
                     <TableCell>
                       <Typography variant="subtitle2" fontWeight="bold">
-                        {receipt.receiptNumber}
+                        {receipt.reference_number || receipt.id}
                       </Typography>
                     </TableCell>
-                    <TableCell>{receipt.supplier?.name || 'نامشخص'}</TableCell>
-                    <TableCell>{receipt.date}</TableCell>
-                    <TableCell>
-                      {receipt.status === 'in_transit' ? (
-                        <Box>
-                          <Typography variant="caption" display="block">
-                            {receipt.warehouse?.name || 'نامشخص'}
-                          </Typography>
-                          <Typography variant="caption" color="primary.main">
-                            → {receipt.destinationWarehouse?.name || 'نامشخص'}
-                          </Typography>
-                        </Box>
-                      ) : (
-                        receipt.warehouse?.name || 'نامشخص'
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="subtitle2" color="success.main">
-                        {receipt.totalValue?.toLocaleString('fa-IR')} ریال
-                      </Typography>
-                    </TableCell>
+                    <TableCell>{receipt.supplier_name || receipt.supplier || 'نامشخص'}</TableCell>
+                    <TableCell>{receipt.movement_date ? new Date(receipt.movement_date).toLocaleDateString('fa-IR') : ''}</TableCell>
+                    <TableCell>{receipt.to_warehouse || receipt.warehouse || 'نامشخص'}</TableCell>
                     <TableCell>
                       <Chip
                         label={getStatusText(receipt.status)}
@@ -301,21 +316,14 @@ export default function ReceiptManagement() {
                       />
                     </TableCell>
                     <TableCell align="center">
-                      <IconButton
-                        size="small"
-                        color="primary"
-                        onClick={() => handleOpenDialog(receipt)}
-                      >
+                      <IconButton size="small" color="primary" onClick={() => handleOpenDialog(receipt)}>
                         <EditIcon />
                       </IconButton>
-                      {receipt.status === 'in_transit' && (
-                        <Button
-                          size="small"
-                          color="success"
-                          variant="outlined"
-                          onClick={() => handleConfirmReceipt(receipt.id)}
-                          sx={{ ml: 1 }}
-                        >
+                      <IconButton size="small" color="error" onClick={() => handleDeleteReceipt(receipt.id)}>
+                        <DeleteIcon />
+                      </IconButton>
+                      {receipt.status !== 'received' && (
+                        <Button size="small" color="success" variant="outlined" onClick={() => handleConfirmReceipt(receipt.id)} sx={{ ml: 1 }}>
                           تایید رسید
                         </Button>
                       )}
@@ -336,15 +344,12 @@ export default function ReceiptManagement() {
         title={editingReceipt ? "ویرایش رسید کالا" : "رسید کالای جدید"}
         type="receipt"
         mode={editingReceipt ? "edit" : "add"}
-        initialData={editingReceipt ? {
-          receiptNumber: editingReceipt.receiptNumber,
-          supplier: editingReceipt.supplier,
-          date: editingReceipt.date,
-          warehouse: editingReceipt.warehouse,
-          items: editingReceipt.items || [],
-          notes: editingReceipt.notes || '',
-          status: editingReceipt.status
-        } : null}
+        initialData={editingReceipt}
+        drugs={drugs}
+        warehouses={warehouses}
+        suppliers={suppliers}
+        loading={formLoading}
+        error={formError}
       />
 
 
@@ -360,3 +365,5 @@ export default function ReceiptManagement() {
     </Box>
   )
 }
+
+export default ReceiptManagement

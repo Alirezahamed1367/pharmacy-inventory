@@ -30,11 +30,11 @@ import {
   SwapHoriz as TransferIcon,
 } from '@mui/icons-material'
 import { DrugSelect, SupplierSelect, WarehouseSelect, UnitSelect } from './DropdownSelects'
-import { DRUGS_DATABASE, SUPPLIERS, WAREHOUSES, UNITS, getDrugsSortedSmart, getDrugDisplayName } from '../data/systemData'
 
 /**
  * کامپوننت مشترک برای مدیریت انتقال کالا
  * کاربردها: حواله انتقالی بین انبارها، رسید کالا
+ * داده‌ها از props (drugs, warehouses, suppliers) دریافت می‌شوند
  */
 export default function TransferDialog({
   open,
@@ -44,6 +44,11 @@ export default function TransferDialog({
   type = "transfer", // "transfer" | "receipt"
   initialData = null,
   mode = "add", // "add" | "edit"
+  drugs = [],
+  warehouses = [],
+  suppliers = [],
+  loading = false,
+  error = null
 }) {
   // حالت اولیه برای انواع مختلف
   const getInitialFormData = () => {
@@ -83,19 +88,12 @@ export default function TransferDialog({
   // فیلتر داروهای موجود برای انتقال
   const availableDrugs = useMemo(() => {
     if (type === "transfer" && formData.fromWarehouse) {
-      // برای انتقال: فقط داروهای موجود در انبار مبدا
-      const warehouse = WAREHOUSES.find(w => w.id === formData.fromWarehouse?.id)
-      if (warehouse && warehouse.drugs) {
-        return warehouse.drugs.map(drugItem => {
-          const fullDrug = DRUGS_DATABASE.find(d => d.name === drugItem.name)
-          return fullDrug ? { ...fullDrug, availableQuantity: drugItem.quantity } : null
-        }).filter(Boolean)
-      }
-      return []
+      // برای انتقال: فقط داروهای موجود در انبار مبدا (باید از inventory_view دریافت شود)
+      return drugs.filter(drug => drug.warehouse_id === formData.fromWarehouse?.id)
     }
-    // برای رسید: تمام داروها با مرتب‌سازی هوشمند
-    return getDrugsSortedSmart()
-  }, [type, formData.fromWarehouse])
+    // برای رسید: تمام داروها
+    return drugs || []
+  }, [type, formData.fromWarehouse, drugs])
 
   const handleAddItem = () => {
     if (!newItem.drug || !newItem.quantity || !newItem.unit) {
@@ -246,7 +244,7 @@ export default function TransferDialog({
                     fromWarehouse: newValue,
                     items: [] // Clear items when source changes
                   })}
-                  warehouses={WAREHOUSES.filter(w => w.id !== 6)} // Exclude transit warehouse
+                  warehouses={warehouses.filter(w => w.id !== 6)} // Exclude transit warehouse
                   label="از انبار"
                   required
                   size="medium"
@@ -256,7 +254,7 @@ export default function TransferDialog({
                 <WarehouseSelect
                   value={formData.toWarehouse}
                   onChange={(newValue) => setFormData({ ...formData, toWarehouse: newValue })}
-                  warehouses={WAREHOUSES.filter(w => 
+                  warehouses={warehouses.filter(w => 
                     w.id !== 6 && w.id !== formData.fromWarehouse?.id
                   )}
                   label="به انبار"
@@ -301,7 +299,7 @@ export default function TransferDialog({
                 <SupplierSelect
                   value={formData.supplier}
                   onChange={(newValue) => setFormData({ ...formData, supplier: newValue })}
-                  suppliers={SUPPLIERS}
+                  suppliers={suppliers}
                   label="تامین‌کننده"
                   required
                   size="medium"
@@ -311,7 +309,7 @@ export default function TransferDialog({
                 <WarehouseSelect
                   value={formData.warehouse}
                   onChange={(newValue) => setFormData({ ...formData, warehouse: newValue })}
-                  warehouses={WAREHOUSES}
+                  warehouses={warehouses}
                   label="انبار مقصد"
                   excludeTransit={true}
                   required
@@ -370,7 +368,15 @@ export default function TransferDialog({
             <UnitSelect
               value={newItem.unit}
               onChange={(newValue) => setNewItem({ ...newItem, unit: newValue })}
-              units={UNITS}
+              units={[
+                { id: 1, name: 'عدد', symbol: 'عدد' },
+                { id: 2, name: 'بسته', symbol: 'بسته' },
+                { id: 3, name: 'جعبه', symbol: 'جعبه' },
+                { id: 4, name: 'کیلوگرم', symbol: 'کیلو' },
+                { id: 5, name: 'گرم', symbol: 'گرم' },
+                { id: 6, name: 'میلی‌لیتر', symbol: 'میلی‌لیتر' },
+                { id: 7, name: 'لیتر', symbol: 'لیتر' }
+              ]}
               label="واحد"
               required
               size="medium"

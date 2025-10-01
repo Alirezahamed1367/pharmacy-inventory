@@ -53,64 +53,33 @@ import {
   Sms as SmsIcon
 } from '@mui/icons-material'
 import AccessLevelManagement from '../components/AccessLevelManagement'
-import { SUPPLIERS } from '../data/systemData'
+import { supabase } from '../services/supabase'
 
-// داده‌های نمونه
-const sampleUsers = [
-  {
-    id: 1,
-    username: 'superadmin',
-    role: 'superadmin',
-    fullName: 'سوپر ادمین',
-    email: 'superadmin@system.com',
-    active: true,
-    lastLogin: '1404/07/01',
-  },
-  {
-    id: 2,
-    username: 'manager1',
-    role: 'admin',
-    fullName: 'علی احمدی',
-    email: 'ali@company.com',
-    active: true,
-    lastLogin: '1404/06/30',
-  },
-  {
-    id: 3,
-    username: 'warehouse1',
-    role: 'manager',
-    fullName: 'فاطمه محمدی',
-    email: 'fateme@company.com',
-    active: true,
-    lastLogin: '1404/06/29',
-  },
-]
-
-const sampleSettings = {
-  notifications: {
-    expireWarnings: true,
-    lowStockAlerts: true,
-    transferNotifications: true,
-    emailNotifications: false,
-  },
-  system: {
-    autoBackup: true,
-    backupInterval: 24,
-    sessionTimeout: 60,
-    maxLoginAttempts: 3,
-  },
-  display: {
-    language: 'fa',
-    theme: 'light',
-    itemsPerPage: 10,
-    dateFormat: 'persian',
-  }
-}
-
-export default function Settings() {
-  const [users, setUsers] = useState(sampleUsers)
-  const [suppliers, setSuppliers] = useState(SUPPLIERS)
-  const [settings, setSettings] = useState(sampleSettings)
+const Settings = () => {
+  const [users, setUsers] = useState([])
+  const [suppliers, setSuppliers] = useState([])
+  const [settings, setSettings] = useState({
+    notifications: {
+      expireWarnings: true,
+      lowStockAlerts: true,
+      transferNotifications: true,
+      emailNotifications: false,
+    },
+    system: {
+      autoBackup: true,
+      backupInterval: 24,
+      sessionTimeout: 60,
+      maxLoginAttempts: 3,
+    },
+    display: {
+      language: 'fa',
+      theme: 'light',
+      itemsPerPage: 10,
+      dateFormat: 'persian',
+    }
+  })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [openUserDialog, setOpenUserDialog] = useState(false)
   const [openSupplierDialog, setOpenSupplierDialog] = useState(false)
   const [selectedUser, setSelectedUser] = useState(null)
@@ -133,6 +102,43 @@ export default function Settings() {
     contactPhone: '',
     specialties: '',
   })
+
+  // دریافت داده‌های کاربران و تامین‌کنندگان از Supabase
+  useEffect(() => {
+    fetchAll()
+  }, [])
+
+  const fetchAll = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      // کاربران
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (usersError) throw usersError
+      setUsers(usersData || [])
+
+      // تامین‌کنندگان (از جدول system_settings یا suppliers)
+      const { data: suppliersData, error: suppliersError } = await supabase
+        .from('system_settings')
+        .select('*')
+        .eq('setting_key', 'suppliers')
+      if (suppliersError) throw suppliersError
+      let suppliersList = []
+      if (suppliersData && suppliersData.length > 0) {
+        try {
+          suppliersList = JSON.parse(suppliersData[0].setting_value)
+        } catch {}
+      }
+      setSuppliers(suppliersList)
+    } catch (err) {
+      setError(err.message || 'خطا در دریافت داده‌ها')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleOpenUserDialog = (user = null) => {
     if (user) {
@@ -162,34 +168,46 @@ export default function Settings() {
     setSelectedUser(null)
   }
 
-  const handleSaveUser = () => {
-    if (selectedUser) {
-      // ویرایش کاربر
-      setUsers(users.map(user => 
-        user.id === selectedUser.id 
-          ? { ...user, ...userFormData }
-          : user
-      ))
-    } else {
-      // افزودن کاربر جدید
-      const newUser = {
-        id: Math.max(...users.map(u => u.id)) + 1,
-        ...userFormData,
-        active: true,
-        lastLogin: '',
+  // افزودن یا ویرایش کاربر در Supabase
+  const handleSaveUser = async () => {
+    try {
+      if (selectedUser) {
+        // ویرایش
+        const { error } = await supabase
+          .from('users')
+          .update({ ...userFormData })
+          .eq('id', selectedUser.id)
+        if (error) throw error
+      } else {
+        // افزودن
+        const { error } = await supabase
+          .from('users')
+          .insert([{ ...userFormData, active: true }])
+        if (error) throw error
       }
-      setUsers([...users, newUser])
-    }
-    handleCloseUserDialog()
-  }
-
-  const handleDeleteUser = (userId) => {
-    if (confirm('آیا از حذف این کاربر مطمئن هستید؟')) {
-      setUsers(users.filter(user => user.id !== userId))
+      fetchAll()
+      handleCloseUserDialog()
+    } catch (err) {
+      setError(err.message || 'خطا در ذخیره کاربر')
     }
   }
 
-  // توابع مدیریت تامین‌کنندگان
+  // حذف کاربر از Supabase
+  const handleDeleteUser = async (userId) => {
+    if (!window.confirm('آیا از حذف این کاربر مطمئن هستید؟')) return
+    try {
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', userId)
+      if (error) throw error
+      fetchAll()
+    } catch (err) {
+      setError(err.message || 'خطا در حذف کاربر')
+    }
+  }
+
+  // توابع مدیریت تامین‌کنندگان (CRUD در system_settings)
   const handleOpenSupplierDialog = (supplier = null) => {
     if (supplier) {
       setSelectedSupplier(supplier)
@@ -224,35 +242,53 @@ export default function Settings() {
     setSelectedSupplier(null)
   }
 
-  const handleSaveSupplier = () => {
-    const supplierData = {
-      ...supplierFormData,
-      specialties: supplierFormData.specialties.split(',').map(s => s.trim()).filter(s => s),
-      rating: 0,
-      isActive: true
-    }
-
-    if (selectedSupplier) {
-      // ویرایش تامین‌کننده
-      setSuppliers(suppliers.map(supplier => 
-        supplier.id === selectedSupplier.id 
-          ? { ...supplier, ...supplierData }
-          : supplier
-      ))
-    } else {
-      // افزودن تامین‌کننده جدید
-      const newSupplier = {
-        id: Math.max(...suppliers.map(s => s.id)) + 1,
-        ...supplierData,
+  // افزودن یا ویرایش تامین‌کننده (در system_settings)
+  const handleSaveSupplier = async () => {
+    try {
+      let updatedSuppliers = [...suppliers]
+      const supplierData = {
+        ...supplierFormData,
+        specialties: supplierFormData.specialties.split(',').map(s => s.trim()).filter(s => s),
+        rating: 0,
+        isActive: true
       }
-      setSuppliers([...suppliers, newSupplier])
+      if (selectedSupplier) {
+        // ویرایش
+        updatedSuppliers = updatedSuppliers.map(supplier => 
+          supplier.id === selectedSupplier.id 
+            ? { ...supplier, ...supplierData }
+            : supplier
+        )
+      } else {
+        // افزودن
+        updatedSuppliers.push({ ...supplierData, id: Date.now() })
+      }
+      // ذخیره در system_settings
+      const { error } = await supabase
+        .from('system_settings')
+        .update({ setting_value: JSON.stringify(updatedSuppliers) })
+        .eq('setting_key', 'suppliers')
+      if (error) throw error
+      fetchAll()
+      handleCloseSupplierDialog()
+    } catch (err) {
+      setError(err.message || 'خطا در ذخیره تامین‌کننده')
     }
-    handleCloseSupplierDialog()
   }
 
-  const handleDeleteSupplier = (supplierId) => {
-    if (confirm('آیا از حذف این تامین‌کننده مطمئن هستید؟')) {
-      setSuppliers(suppliers.filter(supplier => supplier.id !== supplierId))
+  // حذف تامین‌کننده (در system_settings)
+  const handleDeleteSupplier = async (supplierId) => {
+    if (!window.confirm('آیا از حذف این تامین‌کننده مطمئن هستید؟')) return
+    try {
+      const updatedSuppliers = suppliers.filter(supplier => supplier.id !== supplierId)
+      const { error } = await supabase
+        .from('system_settings')
+        .update({ setting_value: JSON.stringify(updatedSuppliers) })
+        .eq('setting_key', 'suppliers')
+      if (error) throw error
+      fetchAll()
+    } catch (err) {
+      setError(err.message || 'خطا در حذف تامین‌کننده')
     }
   }
 
@@ -286,6 +322,8 @@ export default function Settings() {
 
   return (
     <Box>
+      {loading && <Alert severity="info">در حال بارگذاری داده‌ها...</Alert>}
+      {error && <Alert severity="error">{error}</Alert>}
       {/* Header */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" component="h1" fontWeight="bold" gutterBottom>
@@ -1139,3 +1177,5 @@ export default function Settings() {
     </Box>
   )
 }
+
+export default Settings

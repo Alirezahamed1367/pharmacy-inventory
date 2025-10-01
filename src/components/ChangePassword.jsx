@@ -22,6 +22,7 @@ import {
   Key,
   Security
 } from '@mui/icons-material'
+import { supabase } from '../services/supabase'
 
 const ChangePassword = ({ open, onClose, currentUser }) => {
   const [formData, setFormData] = useState({
@@ -89,35 +90,37 @@ const ChangePassword = ({ open, onClose, currentUser }) => {
     setError('')
 
     try {
-      // شبیه‌سازی بررسی رمز عبور فعلی
-      const users = [
-        { username: 'superadmin', password: 'A25893Aa' },
-        { username: 'admin1', password: '123456' },
-        { username: 'manager1', password: '123456' },
-        { username: 'operator1', password: '123456' }
-      ]
+      // بررسی رمز عبور فعلی از دیتابیس
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('password')
+        .eq('id', currentUser.id)
+        .single()
 
-      const currentUserData = users.find(u => u.username === currentUser.username)
-      
-      if (!currentUserData || currentUserData.password !== formData.currentPassword) {
+      if (userError || !userData) {
+        setError('خطا در دریافت اطلاعات کاربر')
+        setLoading(false)
+        return
+      }
+
+      // بررسی رمز عبور فعلی (در پروژه واقعی باید از hashing استفاده کنید)
+      if (userData.password !== formData.currentPassword) {
         setError('رمز عبور فعلی اشتباه است')
         setLoading(false)
         return
       }
 
-      // شبیه‌سازی تغییر رمز عبور
-      // در اینجا می‌توانید با API واقعی ارتباط برقرار کنید
-      await new Promise(resolve => setTimeout(resolve, 1500)) // شبیه‌سازی تأخیر API
+      // به‌روزرسانی رمز عبور در دیتابیس
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ password: formData.newPassword })
+        .eq('id', currentUser.id)
 
-      // به‌روزرسانی رمز عبور در localStorage (در پروژه واقعی از دیتابیس استفاده کنید)
-      const updatedUsers = users.map(u => 
-        u.username === currentUser.username 
-          ? { ...u, password: formData.newPassword }
-          : u
-      )
-      
-      // ذخیره در localStorage برای نمونه
-      localStorage.setItem('userPasswords', JSON.stringify(updatedUsers))
+      if (updateError) {
+        setError('خطا در تغییر رمز عبور: ' + updateError.message)
+        setLoading(false)
+        return
+      }
 
       setSuccess(true)
       setFormData({

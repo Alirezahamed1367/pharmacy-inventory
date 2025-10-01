@@ -268,33 +268,6 @@ export default function LoginPage() {
               >
                 {loading ? 'در حال ورود...' : 'ورود به سیستم'}
               </Button>
-
-              {/* دکمه ورود سریع برای تست */}
-              <Button
-                fullWidth
-                variant="outlined"
-                size="large"
-                onClick={() => {
-                  setFormData({ username: 'superadmin', password: 'A25893Aa' })
-                  setTimeout(() => {
-                    handleSubmit({ preventDefault: () => {} })
-                  }, 100)
-                }}
-                sx={{
-                  py: 1.5,
-                  borderRadius: 2,
-                  fontSize: '1rem',
-                  fontWeight: 'bold',
-                  borderColor: '#42a5f5',
-                  color: '#1976d2',
-                  '&:hover': {
-                    borderColor: '#1976d2',
-                    backgroundColor: 'rgba(25, 118, 210, 0.04)',
-                  },
-                }}
-              >
-                ورود سریع (Super Admin)
-              </Button>
             </form>
           </CardContent>
 

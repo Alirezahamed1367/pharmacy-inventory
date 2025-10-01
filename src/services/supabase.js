@@ -11,28 +11,27 @@ export const supabase = import.meta.env.VITE_SUPABASE_URL ?
 // تابع احراز هویت
 export const signIn = async (username, password) => {
   if (!supabase) {
-    // حالت دمو برای تست محلی
-    const demoUsers = [
-      { username: 'superadmin', password: 'A25893Aa', role: 'superadmin', name: 'سوپر ادمین' },
-      { username: 'admin1', password: '123456', role: 'admin', name: 'مدیر کل' },
-      { username: 'manager1', password: '123456', role: 'manager', name: 'مدیر انبار' },
-      { username: 'operator1', password: '123456', role: 'operator', name: 'کارمند' }
-    ]
-    
-    const user = demoUsers.find(u => u.username === username && u.password === password)
-    if (user) {
-      return { data: { user }, error: null }
-    } else {
-      return { data: null, error: { message: 'نام کاربری یا رمز عبور اشتباه است' } }
-    }
+    throw new Error('Supabase اتصال به دیتابیس برقرار نیست. لطفاً متغیرهای محیطی را بررسی کنید')
   }
 
-  // اتصال واقعی Supabase
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: username + '@pharmacy-inventory.app',
-    password: password
-  })
-  return { data, error }
+  try {
+    // ورود با جستجوی کاربر در جدول users
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('username', username)
+      .eq('password', password)
+      .eq('active', true)
+      .single()
+
+    if (userError || !userData) {
+      return { data: null, error: { message: 'نام کاربری یا رمز عبور اشتباه است' } }
+    }
+
+    return { data: { user: userData }, error: null }
+  } catch (error) {
+    return { data: null, error: { message: 'خطا در ورود به سیستم: ' + error.message } }
+  }
 }
 
 // تابع خروج از سیستم

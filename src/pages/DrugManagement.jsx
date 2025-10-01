@@ -78,9 +78,7 @@ const DrugManagement = () => {
   const fetchDrugs = async () => {
     try {
       if (!supabase) {
-        // حالت demo - بدون دیتابیس
-        setDrugs([])
-        return
+        throw new Error('اتصال به دیتابیس برقرار نیست')
       }
 
       setLoading(true)
@@ -230,20 +228,7 @@ const DrugManagement = () => {
       }
 
       if (!supabase) {
-        // حالت demo - بدون دیتابیس
-        if (selectedDrug) {
-          const updatedDrugs = drugs.map(drug => 
-            drug.id === selectedDrug.id ? { ...drug, ...drugData } : drug
-          )
-          setDrugs(updatedDrugs)
-          setSnackbar({ open: true, message: 'دارو با موفقیت ویرایش شد', severity: 'success' })
-        } else {
-          const newDrug = { id: Date.now(), ...drugData }
-          setDrugs([...drugs, newDrug])
-          setSnackbar({ open: true, message: 'دارو با موفقیت اضافه شد', severity: 'success' })
-        }
-        handleCloseDialog()
-        return
+        throw new Error('اتصال به دیتابیس برقرار نیست')
       }
 
       let result
@@ -330,10 +315,7 @@ const DrugManagement = () => {
       setLoading(true)
 
       if (!supabase) {
-        // حالت demo - بدون دیتابیس
-        setDrugs(drugs.filter(drug => drug.id !== drugId))
-        setSnackbar({ open: true, message: 'دارو با موفقیت حذف شد', severity: 'success' })
-        return
+        throw new Error('اتصال به دیتابیس برقرار نیست')
       }
 
       const { error } = await supabase
@@ -532,11 +514,10 @@ const DrugManagement = () => {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>دارو</TableCell>
+                  <TableCell>تصویر</TableCell>
+                  <TableCell>نام دارو</TableCell>
                   <TableCell>دوز</TableCell>
-                  <TableCell>انبار</TableCell>
-                  <TableCell>موجودی</TableCell>
-                  <TableCell>تاریخ انقضا</TableCell>
+                  <TableCell>توضیحات</TableCell>
                   <TableCell>وضعیت</TableCell>
                   <TableCell align="center">عملیات</TableCell>
                 </TableRow>
@@ -545,44 +526,21 @@ const DrugManagement = () => {
                 {filteredDrugs.map((drug) => (
                   <TableRow key={drug.id}>
                     <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Avatar 
-                          sx={{ 
-                            bgcolor: 'primary.main', 
-                            width: 50, 
-                            height: 50,
-                            cursor: drug.image ? 'pointer' : 'default'
-                          }}
-                          src={drug.image ? URL.createObjectURL(drug.image) : undefined}
-                          onClick={() => drug.image && handleImageZoom(URL.createObjectURL(drug.image))}
-                        >
-                          {!drug.image && <MedicationIcon />}
-                        </Avatar>
-                        <Box>
-                          <Typography variant="subtitle2" fontWeight="bold">
-                            {drug.name}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {drug.description}
-                          </Typography>
-                        </Box>
-                      </Box>
+                      <Avatar 
+                        sx={{ bgcolor: 'primary.main', width: 50, height: 50, cursor: drug.image_url ? 'pointer' : 'default' }}
+                        src={drug.image_url || undefined}
+                        onClick={() => drug.image_url && handleImageZoom(drug.image_url)}
+                      >
+                        {!drug.image_url && <MedicationIcon />}
+                      </Avatar>
                     </TableCell>
+                    <TableCell>{drug.name}</TableCell>
                     <TableCell>{drug.dosage}</TableCell>
-                    <TableCell>{drug.warehouse}</TableCell>
-                    <TableCell>
-                      <Chip 
-                        label={`${drug.quantity} عدد`}
-                        color="primary"
-                        variant="outlined"
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>{drug.expireDate}</TableCell>
+                    <TableCell>{drug.description}</TableCell>
                     <TableCell>
                       <Chip
-                        label={getStatusText(calculateExpireStatus(drug.expireDate))}
-                        color={getStatusColor(calculateExpireStatus(drug.expireDate))}
+                        label={drug.active ? 'فعال' : 'غیرفعال'}
+                        color={drug.active ? 'success' : 'default'}
                         size="small"
                       />
                     </TableCell>

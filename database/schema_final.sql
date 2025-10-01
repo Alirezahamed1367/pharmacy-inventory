@@ -24,40 +24,6 @@ CREATE TABLE public.drug_categories (
 );
 
 -- =====================================================
--- جدول انبارها
--- =====================================================
-CREATE TABLE public.warehouses (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    description TEXT,
-    location VARCHAR(200),
-    manager_name VARCHAR(100),
-    capacity INTEGER DEFAULT 1000 CHECK (capacity > 0),
-    current_stock INTEGER DEFAULT 0 CHECK (current_stock >= 0),
-    active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- =====================================================
--- جدول کاربران
--- =====================================================
-CREATE TABLE public.users (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    username VARCHAR(50) UNIQUE NOT NULL,
-    name VARCHAR(100) NOT NULL,
-    role VARCHAR(20) NOT NULL DEFAULT 'operator' CHECK (role IN ('superadmin', 'admin', 'manager', 'operator')),
-    warehouse_id UUID REFERENCES public.warehouses(id),
-    active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- =====================================================
--- جدول داروها
--- =====================================================
-CREATE TABLE public.drugs (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     name VARCHAR(200) NOT NULL,
     generic_name VARCHAR(200),
     description TEXT,
@@ -261,43 +227,7 @@ LEFT JOIN public.warehouses tw ON dm.to_warehouse_id = tw.id
 LEFT JOIN public.users cu ON dm.created_by = cu.id
 LEFT JOIN public.users au ON dm.approved_by = au.id;
 
--- =====================================================
--- داده‌های نمونه
--- =====================================================
 
--- دسته‌بندی داروها
-INSERT INTO public.drug_categories (name, description) VALUES
-('ضد درد', 'داروهای مسکن و ضد التهاب'),
-('آنتی‌بیوتیک', 'داروهای ضد عفونی'),
-('ویتامین', 'مکمل‌های ویتامین و مواد معدنی'),
-('قلبی عروقی', 'داروهای مربوط به قلب و عروق'),
-('گوارشی', 'داروهای مربوط به دستگاه گوارش');
-
--- انبارهای نمونه
-INSERT INTO public.warehouses (name, description, location, manager_name, capacity) VALUES
-('انبار مرکزی', 'انبار اصلی شرکت', 'تهران، میدان ولیعصر', 'علی احمدی', 2000),
-('انبار شعبه شرق', 'انبار منطقه شرقی', 'تهران، نارمک', 'فاطمه محمدی', 800),
-('انبار شعبه غرب', 'انبار منطقه غربی', 'تهران، اکباتان', 'محمد رضایی', 600),
-('انبار شعبه شمال', 'انبار منطقه شمالی', 'تهران، تجریش', 'زهرا کریمی', 500);
-
--- کاربران نمونه
-INSERT INTO public.users (username, name, role, active) VALUES
-('superadmin', 'سوپر ادمین', 'superadmin', true),
-('admin1', 'مدیر کل', 'admin', true),
-('manager1', 'علی احمدی', 'manager', true),
-('operator1', 'فاطمه محمدی', 'operator', true),
-('operator2', 'محمد رضایی', 'operator', true);
-
--- تنظیمات سیستم
-INSERT INTO public.system_settings (setting_key, setting_value, setting_type, description) VALUES
-('app_name', 'سیستم انبارداری دارو', 'string', 'نام برنامه'),
-('version', '1.0.0', 'string', 'نسخه برنامه'),
-('developer', 'علیرضا حامد', 'string', 'توسعه‌دهنده'),
-('development_year', 'پاییز 1404', 'string', 'زمان توسعه'),
-('session_timeout', '1800', 'number', 'مدت زمان نشست به ثانیه'),
-('max_file_size', '5242880', 'number', 'حداکثر اندازه فایل آپلود (5MB)'),
-('enable_notifications', 'true', 'boolean', 'فعال‌سازی اعلان‌ها'),
-('backup_frequency', 'daily', 'string', 'فرکانس پشتیبان‌گیری');
 
 -- =====================================================
 -- تکمیل اسکریپت

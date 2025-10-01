@@ -38,69 +38,12 @@ import {
 import TransferDialog from '../components/TransferDialog'
 import { ManagerSelect } from '../components/DropdownSelects'
 
-// داده‌های نمونه
-const sampleSuppliers = [
-  { id: 1, name: 'شرکت داروسازی سینا', phone: '021-12345678', contact: 'احمد رضایی' },
-  { id: 2, name: 'شرکت طب داری', phone: '021-87654321', contact: 'فاطمه کریمی' },
-  { id: 3, name: 'داروخانه مرکزی ایران', phone: '021-11223344', contact: 'محمد حسینی' },
-]
-
-// لیست مسئولان انبار
-const sampleManagers = [
-  { id: 1, name: 'علی احمدی', position: 'مدیر انبار ارشد', phone: '09121234567' },
-  { id: 2, name: 'فاطمه محمدی', position: 'مدیر انبار', phone: '09129876543' },
-  { id: 3, name: 'محمد حسینی', position: 'مسئول انبار', phone: '09123456789' },
-  { id: 4, name: 'سارا رضایی', position: 'مدیر انبار', phone: '09187654321' },
-  { id: 5, name: 'احمد کریمی', position: 'مسئول انبار', phone: '09111223344' },
-  { id: 6, name: 'زهرا مرادی', position: 'مدیر انبار', phone: '09198765432' }
-]
-
-const sampleWarehouses = [
-  {
-    id: 1,
-    name: 'انبار مرکزی',
-    description: 'انبار اصلی شرکت',
-    location: 'تهران، میدان ولیعصر',
-    manager: 'علی احمدی',
-    capacity: 1000,
-    currentStock: 750,
-    supplier: 'شرکت داروسازی سینا',
-    drugs: [
-      { name: 'آسپرین', quantity: 100, expireDate: '1404/08/15', batch: 'A001' },
-      { name: 'ایبوپروفن', quantity: 50, expireDate: '1404/09/20', batch: 'B002' },
-      { name: 'پنی‌سیلین', quantity: 75 },
-    ]
-  },
-  {
-    id: 2,
-    name: 'انبار شعبه شرق',
-    description: 'انبار منطقه شرقی',
-    location: 'تهران، نارمک',
-    manager: 'فاطمه محمدی',
-    capacity: 500,
-    currentStock: 320,
-    drugs: [
-      { name: 'آسپرین', quantity: 80, expireDate: '1404/07/10', batch: 'A003' },
-      { name: 'سیپروفلوکساسین', quantity: 40, expireDate: '1404/11/05', batch: 'C004' },
-    ]
-  },
-  {
-    id: 3,
-    name: 'انبار شعبه غرب',
-    description: 'انبار منطقه غربی',
-    location: 'تهران، اکباتان',
-    manager: 'محمد رضایی',
-    capacity: 300,
-    currentStock: 180,
-    drugs: [
-      { name: 'پنی‌سیلین', quantity: 30, expireDate: '1404/06/25', batch: 'P005' },
-      { name: 'آموکسی‌سیلین', quantity: 45, expireDate: '1404/10/12', batch: 'A006' },
-    ]
-  },
-]
+import { useEffect } from 'react'
+import { supabase } from '../services/supabase'
 
 export default function WarehouseManagement() {
-  const [warehouses, setWarehouses] = useState(sampleWarehouses)
+  const [warehouses, setWarehouses] = useState([])
+  const [managers, setManagers] = useState([])
   const [openDialog, setOpenDialog] = useState(false)
   const [openTransferDialog, setOpenTransferDialog] = useState(false)
   const [selectedWarehouse, setSelectedWarehouse] = useState(null)
@@ -111,6 +54,38 @@ export default function WarehouseManagement() {
     manager: '',
     capacity: '',
   })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    fetchAll()
+  }, [])
+
+  const fetchAll = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      // انبارها
+      const { data: warehousesData, error: warehousesError } = await supabase
+        .from('warehouses')
+        .select('*')
+        .order('name')
+      if (warehousesError) throw warehousesError
+      setWarehouses(warehousesData || [])
+
+      // مسئولان انبار (کاربران با نقش manager)
+      const { data: managersData, error: managersError } = await supabase
+        .from('users')
+        .select('id, name, role, phone')
+        .eq('role', 'manager')
+      if (managersError) throw managersError
+      setManagers(managersData || [])
+    } catch (err) {
+      setError(err.message || 'خطا در دریافت داده‌ها')
+    } finally {
+      setLoading(false)
+    }
+  }
 
 
 
@@ -142,30 +117,42 @@ export default function WarehouseManagement() {
     setSelectedWarehouse(null)
   }
 
-  const handleSave = () => {
-    if (selectedWarehouse) {
-      // ویرایش انبار
-      setWarehouses(warehouses.map(warehouse => 
-        warehouse.id === selectedWarehouse.id 
-          ? { ...warehouse, ...formData }
-          : warehouse
-      ))
-    } else {
-      // افزودن انبار جدید
-      const newWarehouse = {
-        id: Math.max(...warehouses.map(w => w.id)) + 1,
-        ...formData,
-        currentStock: 0,
-        drugs: []
+  // افزودن یا ویرایش انبار در Supabase
+  const handleSave = async () => {
+    try {
+      if (selectedWarehouse) {
+        // ویرایش
+        const { error } = await supabase
+          .from('warehouses')
+          .update({ ...formData })
+          .eq('id', selectedWarehouse.id)
+        if (error) throw error
+      } else {
+        // افزودن
+        const { error } = await supabase
+          .from('warehouses')
+          .insert([{ ...formData, active: true }])
+        if (error) throw error
       }
-      setWarehouses([...warehouses, newWarehouse])
+      fetchAll()
+      handleCloseDialog()
+    } catch (err) {
+      setError(err.message || 'خطا در ذخیره انبار')
     }
-    handleCloseDialog()
   }
 
-  const handleDelete = (warehouseId) => {
-    if (confirm('آیا از حذف این انبار مطمئن هستید؟')) {
-      setWarehouses(warehouses.filter(warehouse => warehouse.id !== warehouseId))
+  // حذف انبار از Supabase
+  const handleDelete = async (warehouseId) => {
+    if (!window.confirm('آیا از حذف این انبار مطمئن هستید؟')) return
+    try {
+      const { error } = await supabase
+        .from('warehouses')
+        .delete()
+        .eq('id', warehouseId)
+      if (error) throw error
+      fetchAll()
+    } catch (err) {
+      setError(err.message || 'خطا در حذف انبار')
     }
   }
 
@@ -183,6 +170,8 @@ export default function WarehouseManagement() {
 
   return (
     <Box>
+      {loading && <Alert severity="info">در حال بارگذاری داده‌ها...</Alert>}
+      {error && <Alert severity="error">{error}</Alert>}
       {/* Header */}
       <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Box>
@@ -216,7 +205,7 @@ export default function WarehouseManagement() {
       {/* Warehouses Grid */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         {warehouses.map((warehouse) => {
-          const capacityPercentage = getCapacityPercentage(warehouse.currentStock, warehouse.capacity)
+          const capacityPercentage = getCapacityPercentage(warehouse.current_stock || 0, warehouse.capacity || 1)
           return (
             <Grid item xs={12} md={6} lg={4} key={warehouse.id}>
               <Card sx={{ height: '100%' }}>
@@ -256,12 +245,11 @@ export default function WarehouseManagement() {
                     </Typography>
                   </Box>
 
-
                   <Box sx={{ mb: 2 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                       <Typography variant="caption">ظرفیت انبار</Typography>
                       <Typography variant="caption" fontWeight="bold">
-                        {warehouse.currentStock} / {warehouse.capacity}
+                        {warehouse.current_stock || 0} / {warehouse.capacity || 0}
                       </Typography>
                     </Box>
                     <Box sx={{ width: '100%', height: 8, backgroundColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
@@ -279,22 +267,7 @@ export default function WarehouseManagement() {
                     </Typography>
                   </Box>
 
-                  <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-                    داروهای موجود:
-                  </Typography>
-                  <Box sx={{ maxHeight: 140, overflow: 'auto' }}>
-                    {warehouse.drugs.map((drug, index) => (
-                      <Box key={index} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', py: 0.5, borderBottom: '1px solid #f0f0f0' }}>
-                        <Box sx={{ flex: 1 }}>
-                          <Typography variant="caption" fontWeight="bold">{drug.name}</Typography>
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.65rem' }}>
-                            انقضا: {drug.expireDate} | بچ: {drug.batch}
-                          </Typography>
-                        </Box>
-                        <Chip size="small" label={`${drug.quantity} عدد`} color="primary" variant="outlined" />
-                      </Box>
-                    ))}
-                  </Box>
+                  {/* نمایش داروهای انبار از طریق ویو یا کوئری جداگانه (در صورت نیاز) */}
                 </CardContent>
               </Card>
             </Grid>
@@ -332,7 +305,7 @@ export default function WarehouseManagement() {
                     manager: newValue
                   })
                 }}
-                managers={sampleManagers}
+                managers={managers}
                 label="مسئول انبار"
                 required
                 size="medium"

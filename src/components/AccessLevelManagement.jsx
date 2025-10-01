@@ -142,67 +142,10 @@ const PERMISSIONS = {
   basic_operations: 'عملیات پایه'
 };
 
-// کاربران نمونه
-const sampleUsers = [
-  {
-    id: 1,
-    username: 'superadmin',
-    name: 'مدیر کل سیستم',
-    email: 'admin@pharmacy.com',
-    accessLevel: 'super_admin',
-    assignedWarehouses: ['all'],
-    isActive: true,
-    lastLogin: '1404/07/10 - 14:30',
-    permissions: ACCESS_LEVELS.SUPER_ADMIN.permissions
-  },
-  {
-    id: 2,
-    username: 'manager1',
-    name: 'احمد رضایی',
-    email: 'ahmad@pharmacy.com',
-    accessLevel: 'admin',
-    assignedWarehouses: ['all'],
-    isActive: true,
-    lastLogin: '1404/07/09 - 16:45',
-    permissions: ACCESS_LEVELS.ADMIN.permissions
-  },
-  {
-    id: 3,
-    username: 'warehouse1',
-    name: 'فاطمه کریمی',
-    email: 'fateme@pharmacy.com',
-    accessLevel: 'warehouse_manager',
-    assignedWarehouses: [1, 2], // انبار مرکزی و شعبه شرق
-    isActive: true,
-    lastLogin: '1404/07/10 - 08:15',
-    permissions: ACCESS_LEVELS.WAREHOUSE_MANAGER.permissions
-  },
-  {
-    id: 4,
-    username: 'pharmacist1',
-    name: 'دکتر علی محمدی',
-    email: 'ali@pharmacy.com',
-    accessLevel: 'pharmacist',
-    assignedWarehouses: [1],
-    isActive: true,
-    lastLogin: '1404/07/10 - 12:20',
-    permissions: ACCESS_LEVELS.PHARMACIST.permissions
-  },
-  {
-    id: 5,
-    username: 'operator1',
-    name: 'مریم حسینی',
-    email: 'maryam@pharmacy.com',
-    accessLevel: 'operator',
-    assignedWarehouses: [3],
-    isActive: false,
-    lastLogin: '1404/07/05 - 10:30',
-    permissions: ACCESS_LEVELS.OPERATOR.permissions
-  }
-];
+// کاربران از دیتابیس Supabase دریافت می‌شوند
 
 const AccessLevelManagement = () => {
-  const [users, setUsers] = useState(sampleUsers);
+  const [users, setUsers] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [formData, setFormData] = useState({
