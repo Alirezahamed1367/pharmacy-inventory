@@ -138,18 +138,12 @@ export default function DrugManagement() {
     }
     return true
   }
-    features: '',
-    image: null,
-  })
-  const [imagePreview, setImagePreview] = useState(null)
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' })
+
   // بستن Snackbar
   const handleSnackbarClose = (event, reason) => {
     if (reason === 'clickaway') return;
     setSnackbar({ ...snackbar, open: false })
   }
-  const [imageZoomOpen, setImageZoomOpen] = useState(false)
-  const [zoomedImage, setZoomedImage] = useState(null)
 
   const handleOpenDialog = (drug = null) => {
     if (drug) {
