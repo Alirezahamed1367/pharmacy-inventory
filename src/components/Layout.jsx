@@ -28,9 +28,11 @@ import {
   Inventory as InventoryIcon,
   AccountCircle,
   Logout,
+  Lock,
 } from '@mui/icons-material'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { signOut } from '../services/supabase'
+import ChangePassword from './ChangePassword'
 
 const drawerWidth = 280
 
@@ -46,10 +48,14 @@ const menuItems = [
 export default function Layout({ children }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [anchorEl, setAnchorEl] = useState(null)
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false)
   const theme = useTheme()
   const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const navigate = useNavigate()
   const location = useLocation()
+
+  // دریافت اطلاعات کاربر فعلی
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen)
@@ -61,6 +67,15 @@ export default function Layout({ children }) {
 
   const handleMenuClose = () => {
     setAnchorEl(null)
+  }
+
+  const handleChangePasswordOpen = () => {
+    setChangePasswordOpen(true)
+    handleMenuClose()
+  }
+
+  const handleChangePasswordClose = () => {
+    setChangePasswordOpen(false)
   }
 
   const handleLogout = async () => {
@@ -173,6 +188,19 @@ export default function Layout({ children }) {
               open={Boolean(anchorEl)}
               onClose={handleMenuClose}
             >
+              <MenuItem disabled>
+                <ListItemIcon>
+                  <AccountCircle fontSize="small" />
+                </ListItemIcon>
+                {currentUser.name || currentUser.username}
+              </MenuItem>
+              <Divider />
+              <MenuItem onClick={handleChangePasswordOpen}>
+                <ListItemIcon>
+                  <Lock fontSize="small" />
+                </ListItemIcon>
+                تغییر رمز عبور
+              </MenuItem>
               <MenuItem onClick={handleLogout}>
                 <ListItemIcon>
                   <Logout fontSize="small" />
@@ -238,6 +266,13 @@ export default function Layout({ children }) {
         <Toolbar />
         {children}
       </Box>
+
+      {/* دیالوگ تغییر رمز عبور */}
+      <ChangePassword
+        open={changePasswordOpen}
+        onClose={handleChangePasswordClose}
+        currentUser={currentUser}
+      />
     </Box>
   )
 }

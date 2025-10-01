@@ -44,26 +44,26 @@ export default function LoginPage() {
     setError('')
 
     try {
-      // بررسی سوپر ادمین
-      if (formData.username === 'superadmin' && formData.password === 'A25893Aa') {
-        // شبیه‌سازی ورود سوپر ادمین
-        localStorage.setItem('user', JSON.stringify({
-          username: 'superadmin',
-          role: 'superadmin',
-          name: 'سوپر ادمین'
-        }))
-        window.location.reload()
-        return
-      }
-
-      // سایر کاربران (می‌توانید کاربران بیشتری اضافه کنید)
-      const demoUsers = [
+      // بررسی رمزهای آپدیت شده از localStorage
+      const savedPasswords = JSON.parse(localStorage.getItem('userPasswords') || '[]')
+      
+      // کاربران پیش‌فرض
+      let defaultUsers = [
+        { username: 'superadmin', password: 'A25893Aa', role: 'superadmin', name: 'سوپر ادمین' },
         { username: 'admin1', password: '123456', role: 'admin', name: 'مدیر کل' },
         { username: 'manager1', password: '123456', role: 'manager', name: 'مدیر انبار' },
         { username: 'operator1', password: '123456', role: 'operator', name: 'کارمند' }
       ]
 
-      const foundUser = demoUsers.find(u => 
+      // اگر رمزهای آپدیت شده وجود دارد، آنها را جایگزین کن
+      if (savedPasswords.length > 0) {
+        defaultUsers = defaultUsers.map(defaultUser => {
+          const updatedUser = savedPasswords.find(u => u.username === defaultUser.username)
+          return updatedUser ? { ...defaultUser, password: updatedUser.password } : defaultUser
+        })
+      }
+
+      const foundUser = defaultUsers.find(u => 
         u.username === formData.username && u.password === formData.password
       )
 
