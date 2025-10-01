@@ -1,7 +1,8 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Snackbar from '@mui/material/Snackbar'
 import MuiAlert from '@mui/material/Alert'
 import SMSService from '../services/smsService'
+import { supabase } from '../services/supabase'
 import {
   Box,
   Typography,
@@ -39,101 +40,124 @@ import {
   Image as ImageIcon,
 } from '@mui/icons-material'
 
-// داده‌های نمونه
-const sampleSuppliers = [
-  { id: 1, name: 'شرکت داروسازی سینا', phone: '021-12345678', contact: 'احمد رضایی' },
-  { id: 2, name: 'شرکت طب داری', phone: '021-87654321', contact: 'فاطمه کریمی' },
-  { id: 3, name: 'داروخانه مرکزی ایران', phone: '021-11223344', contact: 'محمد حسینی' },
-  { id: 4, name: 'شرکت پخش البرز', phone: '021-55667788', contact: 'علی محمدی' },
-]
-
-const sampleWarehouses = [
-  { id: 1, name: 'انبار مرکزی' },
-  { id: 2, name: 'انبار شعبه شرق' },
-  { id: 3, name: 'انبار شعبه غرب' },
-  { id: 4, name: 'انبار شعبه شمال' },
-  { id: 5, name: 'انبار شعبه جنوب' },
-]
-
-const sampleDrugs = [
-  {
-    id: 1,
-    name: 'آسپرین',
-    description: 'ضد درد و تب‌بر',
-    dosage: '500 میلی‌گرم',
-    expireDate: '2025-11-15',
-    warehouse: 'انبار مرکزی',
-    supplier: 'شرکت داروسازی سینا',
-    quantity: 100,
-    image: null,
-    status: 'active'
-  },
-  {
-    id: 2,
-    name: 'ایبوپروفن',
-    description: 'ضد التهاب و تب‌بر',
-    dosage: '400 میلی‌گرم',
-    expireDate: '2025-09-20',
-    warehouse: 'انبار شعبه شرق',
-    supplier: 'شرکت طب داری',
-    quantity: 75,
-    image: null,
-    status: 'expiring'
-  },
-  {
-    id: 3,
-    name: 'پنی‌سیلین',
-    description: 'آنتی‌بیوتیک',
-    dosage: '250 میلی‌گرم',
-    expireDate: '2025-08-10',
-    warehouse: 'انبار شعبه غرب',
-    supplier: 'داروخانه مرکزی ایران',
-    quantity: 25,
-    image: null,
-    status: 'expired'
-  },
-  {
-    id: 4,
-    name: 'آموکسی‌سیلین',
-    description: 'آنتی‌بیوتیک پنی‌سیلینی',
-    dosage: '500 میلی‌گرم',
-    expireDate: '2026-01-12',
-    warehouse: 'انبار شعبه شمال',
-    supplier: 'شرکت پخش البرز',
-    quantity: 60,
-    image: null,
-    status: 'active'
-  },
-]
-
-export default function DrugManagement() {
-  const [drugs, setDrugs] = useState(sampleDrugs)
+const DrugManagement = () => {
+  const [drugs, setDrugs] = useState([])
+  const [categories, setCategories] = useState([])
+  const [warehouses, setWarehouses] = useState([])
   const [openDialog, setOpenDialog] = useState(false)
   const [selectedDrug, setSelectedDrug] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all') // all, active, expiring, expired
+  const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     dosage: '',
-    expireDate: '',
-    quantity: '',
+    form: '',
+    manufacturer: '',
+    category_id: '',
     features: '',
-    image: null,
+    barcode: '',
+    min_stock_level: 0,
+    max_stock_level: 1000,
+    unit_price: 0,
+    image_url: ''
   })
   const [imagePreview, setImagePreview] = useState(null)
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' })
   const [imageZoomOpen, setImageZoomOpen] = useState(false)
   const [zoomedImage, setZoomedImage] = useState(null)
 
+  // بارگذاری داده‌ها از دیتابیس
+  useEffect(() => {
+    fetchDrugs()
+    fetchCategories()
+    fetchWarehouses()
+  }, [])
+
+  const fetchDrugs = async () => {
+    try {
+      if (!supabase) {
+        // حالت demo - بدون دیتابیس
+        setDrugs([])
+        return
+      }
+
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('drugs')
+        .select(`
+          *,
+          drug_categories (name),
+          warehouse_inventory (
+            quantity,
+            expire_date,
+            warehouses (name)
+          )
+        `)
+        .eq('active', true)
+
+      if (error) {
+        console.error('خطا در بارگذاری داروها:', error)
+        setSnackbar({ open: true, message: 'خطا در بارگذاری داروها', severity: 'error' })
+      } else {
+        setDrugs(data || [])
+      }
+    } catch (err) {
+      console.error('خطا:', err)
+      setSnackbar({ open: true, message: 'خطا در اتصال به دیتابیس', severity: 'error' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchCategories = async () => {
+    try {
+      if (!supabase) return
+
+      const { data, error } = await supabase
+        .from('drug_categories')
+        .select('*')
+        .order('name')
+
+      if (error) {
+        console.error('خطا در بارگذاری دسته‌بندی‌ها:', error)
+      } else {
+        setCategories(data || [])
+      }
+    } catch (err) {
+      console.error('خطا:', err)
+    }
+  }
+
+  const fetchWarehouses = async () => {
+    try {
+      if (!supabase) return
+
+      const { data, error } = await supabase
+        .from('warehouses')
+        .select('*')
+        .eq('active', true)
+        .order('name')
+
+      if (error) {
+        console.error('خطا در بارگذاری انبارها:', error)
+      } else {
+        setWarehouses(data || [])
+      }
+    } catch (err) {
+      console.error('خطا:', err)
+    }
+  }
+
   // اعتبارسنجی فرم با پیام خطا
   const validateForm = () => {
-    if (!formData.name.trim() || !formData.dosage || !formData.expireDate || !formData.quantity) {
-      setSnackbar({ open: true, message: 'لطفاً همه فیلدهای ضروری را به‌درستی پر کنید', severity: 'error' })
+    if (!formData.name.trim() || !formData.dosage.trim()) {
+      setSnackbar({ open: true, message: 'لطفاً نام دارو و دوز را وارد کنید', severity: 'error' })
       return false
     }
-    if (isNaN(Number(formData.quantity)) || Number(formData.quantity) <= 0) {
-      setSnackbar({ open: true, message: 'مقدار باید عدد مثبت باشد', severity: 'error' })
+    if (formData.unit_price < 0) {
+      setSnackbar({ open: true, message: 'قیمت نمی‌تواند منفی باشد', severity: 'error' })
       return false
     }
     return true
@@ -184,40 +208,87 @@ export default function DrugManagement() {
 
 
   const handleSave = async () => {
-    console.log('FormData before validation:', formData)
-    
-    if (!validateForm()) {
-      return
-    }
+    if (!validateForm()) return
 
-    console.log('FormData after validation:', formData)
+    try {
+      setLoading(true)
 
-    if (selectedDrug) {
-      // ویرایش دارو
-      setDrugs(drugs.map(drug => 
-        drug.id === selectedDrug.id 
-          ? { 
-              ...formData,
-              id: selectedDrug.id,
-              status: calculateExpireStatus(formData.expireDate),
-            }
-          : drug
-      ))
-      setSnackbar({ open: true, message: 'دارو با موفقیت ویرایش شد', severity: 'success' })
-    } else {
-      // افزودن دارو جدید
-      const newDrug = {
-        id: Math.max(...drugs.map(d => d.id)) + 1,
-        ...formData,
-        status: calculateExpireStatus(formData.expireDate)
+      const drugData = {
+        name: formData.name,
+        description: formData.description,
+        dosage: formData.dosage,
+        form: formData.form || 'قرص',
+        manufacturer: formData.manufacturer || '',
+        category_id: formData.category_id || null,
+        features: formData.features || '',
+        barcode: formData.barcode || '',
+        min_stock_level: parseInt(formData.min_stock_level) || 0,
+        max_stock_level: parseInt(formData.max_stock_level) || 1000,
+        unit_price: parseFloat(formData.unit_price) || 0,
+        image_url: formData.image_url || '',
+        active: true
       }
-      setDrugs([...drugs, newDrug])
-      setSnackbar({ open: true, message: 'داروی جدید با موفقیت اضافه شد', severity: 'success' })
-      
-      // ارسال پیامک اطلاع‌رسانی
-      await sendSMSNotification(newDrug)
+
+      if (!supabase) {
+        // حالت demo - بدون دیتابیس
+        if (selectedDrug) {
+          const updatedDrugs = drugs.map(drug => 
+            drug.id === selectedDrug.id ? { ...drug, ...drugData } : drug
+          )
+          setDrugs(updatedDrugs)
+          setSnackbar({ open: true, message: 'دارو با موفقیت ویرایش شد', severity: 'success' })
+        } else {
+          const newDrug = { id: Date.now(), ...drugData }
+          setDrugs([...drugs, newDrug])
+          setSnackbar({ open: true, message: 'دارو با موفقیت اضافه شد', severity: 'success' })
+        }
+        handleCloseDialog()
+        return
+      }
+
+      let result
+      if (selectedDrug) {
+        // ویرایش دارو
+        result = await supabase
+          .from('drugs')
+          .update(drugData)
+          .eq('id', selectedDrug.id)
+          .select()
+      } else {
+        // افزودن دارو جدید
+        result = await supabase
+          .from('drugs')
+          .insert([drugData])
+          .select()
+      }
+
+      if (result.error) {
+        console.error('خطا در ذخیره دارو:', result.error)
+        setSnackbar({ 
+          open: true, 
+          message: 'خطا در ذخیره دارو: ' + result.error.message, 
+          severity: 'error' 
+        })
+      } else {
+        await sendSMSNotification(drugData.name, selectedDrug ? 'edit' : 'add')
+        setSnackbar({ 
+          open: true, 
+          message: selectedDrug ? 'دارو با موفقیت ویرایش شد' : 'دارو با موفقیت اضافه شد', 
+          severity: 'success' 
+        })
+        fetchDrugs() // بارگذاری مجدد لیست داروها
+        handleCloseDialog()
+      }
+    } catch (error) {
+      console.error('خطا در ذخیره دارو:', error)
+      setSnackbar({ 
+        open: true, 
+        message: 'خطا در ذخیره دارو', 
+        severity: 'error' 
+      })
+    } finally {
+      setLoading(false)
     }
-    handleCloseDialog()
   }
 
   // تابع ارسال پیامک
@@ -252,9 +323,44 @@ export default function DrugManagement() {
     }
   }
 
-  const handleDelete = (drugId) => {
-    if (confirm('آیا از حذف این دارو مطمئن هستید؟')) {
-      setDrugs(drugs.filter(drug => drug.id !== drugId))
+  const handleDelete = async (drugId) => {
+    if (!confirm('آیا از حذف این دارو مطمئن هستید؟')) return
+
+    try {
+      setLoading(true)
+
+      if (!supabase) {
+        // حالت demo - بدون دیتابیس
+        setDrugs(drugs.filter(drug => drug.id !== drugId))
+        setSnackbar({ open: true, message: 'دارو با موفقیت حذف شد', severity: 'success' })
+        return
+      }
+
+      const { error } = await supabase
+        .from('drugs')
+        .update({ active: false })
+        .eq('id', drugId)
+
+      if (error) {
+        console.error('خطا در حذف دارو:', error)
+        setSnackbar({ 
+          open: true, 
+          message: 'خطا در حذف دارو: ' + error.message, 
+          severity: 'error' 
+        })
+      } else {
+        setSnackbar({ open: true, message: 'دارو با موفقیت حذف شد', severity: 'success' })
+        fetchDrugs() // بارگذاری مجدد لیست داروها
+      }
+    } catch (error) {
+      console.error('خطا در حذف دارو:', error)
+      setSnackbar({ 
+        open: true, 
+        message: 'خطا در حذف دارو', 
+        severity: 'error' 
+      })
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -727,3 +833,5 @@ export default function DrugManagement() {
     </Box>
   )
 }
+
+export default DrugManagement

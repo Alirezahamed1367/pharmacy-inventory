@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   Box,
   Card,
@@ -11,6 +11,10 @@ import {
   Paper,
   InputAdornment,
   IconButton,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
 } from '@mui/material'
 import {
   Visibility,
@@ -19,7 +23,7 @@ import {
   Lock,
   LocalPharmacy,
 } from '@mui/icons-material'
-import { signIn } from '../services/supabase'
+import { signIn, supabase } from '../services/supabase'
 
 export default function LoginPage() {
   const [formData, setFormData] = useState({
@@ -29,6 +33,43 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [users, setUsers] = useState([])
+
+  // بارگذاری کاربران از دیتابیس
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('username, name, role')
+          .eq('active', true)
+        
+        if (error) {
+          console.error('خطا در بارگذاری کاربران:', error)
+          // اگر دیتابیس در دسترس نباشد، از کاربران پیش‌فرض استفاده کن
+          setUsers([
+            { username: 'superadmin', name: 'سوپر ادمین', role: 'superadmin' },
+            { username: 'admin1', name: 'مدیر کل', role: 'admin' },
+            { username: 'manager1', name: 'مدیر انبار', role: 'manager' },
+            { username: 'operator1', name: 'کارمند', role: 'operator' }
+          ])
+        } else {
+          setUsers(data || [])
+        }
+      } catch (err) {
+        console.error('خطا در اتصال:', err)
+        // در صورت عدم اتصال، از کاربران پیش‌فرض استفاده کن
+        setUsers([
+          { username: 'superadmin', name: 'سوپر ادمین', role: 'superadmin' },
+          { username: 'admin1', name: 'مدیر کل', role: 'admin' },
+          { username: 'manager1', name: 'مدیر انبار', role: 'manager' },
+          { username: 'operator1', name: 'کارمند', role: 'operator' }
+        ])
+      }
+    }
+
+    fetchUsers()
+  }, [])
 
   const handleChange = (e) => {
     setFormData({
@@ -132,27 +173,36 @@ export default function LoginPage() {
           <CardContent sx={{ p: 4 }}>
             <form onSubmit={handleSubmit}>
               <Box sx={{ mb: 3 }}>
-                <TextField
-                  fullWidth
-                  name="username"
-                  label="نام کاربری"
-                  value={formData.username}
-                  onChange={handleChange}
-                  variant="outlined"
-                  required
-                  InputProps={{
-                    startAdornment: (
+                <FormControl fullWidth required>
+                  <InputLabel>انتخاب کاربر</InputLabel>
+                  <Select
+                    name="username"
+                    value={formData.username}
+                    label="انتخاب کاربر"
+                    onChange={handleChange}
+                    startAdornment={
                       <InputAdornment position="start">
                         <AccountCircle color="primary" />
                       </InputAdornment>
-                    ),
-                  }}
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
+                    }
+                    sx={{
                       borderRadius: 2,
-                    },
-                  }}
-                />
+                    }}
+                  >
+                    {users.map((user) => (
+                      <MenuItem key={user.username} value={user.username}>
+                        <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                          <Typography variant="body2" fontWeight="bold">
+                            {user.name}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {user.username} - {user.role}
+                          </Typography>
+                        </Box>
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
               </Box>
 
               <Box sx={{ mb: 3 }}>
@@ -246,22 +296,6 @@ export default function LoginPage() {
                 ورود سریع (Super Admin)
               </Button>
             </form>
-
-            {/* Demo Info */}
-            <Box sx={{ mt: 4, p: 2, backgroundColor: '#f5f5f5', borderRadius: 2 }}>
-              <Typography variant="body2" color="text.secondary" align="center" gutterBottom>
-                اطلاعات ورود برای تست:
-              </Typography>
-              <Typography variant="body2" color="primary" align="center" fontWeight="bold">
-                سوپر ادمین: superadmin / A25893Aa
-              </Typography>
-              <Typography variant="body2" color="primary" align="center" fontWeight="bold">
-                مدیر: admin1 / 123456
-              </Typography>
-              <Typography variant="body2" color="primary" align="center" fontWeight="bold">
-                کارمند: operator1 / 123456
-              </Typography>
-            </Box>
           </CardContent>
 
           {/* Footer */}
