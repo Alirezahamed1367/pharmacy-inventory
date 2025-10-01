@@ -1,15 +1,3 @@
-  // اعتبارسنجی فرم با پیام خطا
-  const validateForm = () => {
-    if (!formData.name.trim() || !formData.dosage || !formData.expireDate || !formData.quantity) {
-      setSnackbar({ open: true, message: 'لطفاً همه فیلدهای ضروری را به‌درستی پر کنید', severity: 'error' })
-      return false
-    }
-    if (isNaN(Number(formData.quantity)) || Number(formData.quantity) <= 0) {
-      setSnackbar({ open: true, message: 'مقدار باید عدد مثبت باشد', severity: 'error' })
-      return false
-    }
-    return true
-  }
 import React, { useState } from 'react'
 import Snackbar from '@mui/material/Snackbar'
 import MuiAlert from '@mui/material/Alert'
@@ -130,6 +118,26 @@ export default function DrugManagement() {
     dosage: '',
     expireDate: '',
     quantity: '',
+    features: '',
+    image: null,
+  })
+  const [imagePreview, setImagePreview] = useState(null)
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' })
+  const [imageZoomOpen, setImageZoomOpen] = useState(false)
+  const [zoomedImage, setZoomedImage] = useState(null)
+
+  // اعتبارسنجی فرم با پیام خطا
+  const validateForm = () => {
+    if (!formData.name.trim() || !formData.dosage || !formData.expireDate || !formData.quantity) {
+      setSnackbar({ open: true, message: 'لطفاً همه فیلدهای ضروری را به‌درستی پر کنید', severity: 'error' })
+      return false
+    }
+    if (isNaN(Number(formData.quantity)) || Number(formData.quantity) <= 0) {
+      setSnackbar({ open: true, message: 'مقدار باید عدد مثبت باشد', severity: 'error' })
+      return false
+    }
+    return true
+  }
     features: '',
     image: null,
   })
