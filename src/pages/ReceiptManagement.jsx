@@ -115,6 +115,12 @@ const ReceiptManagement = () => {
     setFormError(null)
   }
 
+  // تأیید رسید
+  const handleConfirmReceiptSubmit = () => {
+    setOpenConfirmDialog(false)
+    fetchAll() // بروزرسانی لیست
+  }
+
   // افزودن یا ویرایش رسید
   const handleSaveReceipt = async (receiptData) => {
     setFormLoading(true)
