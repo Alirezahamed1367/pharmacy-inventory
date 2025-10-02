@@ -48,6 +48,101 @@
 ### پیش‌نیازها
 ```bash
 Node.js >= 16
+npm یا yarn
+حساب کاربری Supabase
+```
+
+### 1. کلون کردن پروژه
+```bash
+git clone https://github.com/Alirezahamed1367/pharmacy-inventory.git
+cd pharmacy-inventory
+```
+
+### 2. نصب وابستگی‌ها
+```bash
+npm install
+```
+
+### 3. تنظیم متغیرهای محیطی
+```bash
+# کپی کردن فایل نمونه
+cp .env.example .env
+
+# ویرایش فایل .env و وارد کردن اطلاعات Supabase
+VITE_SUPABASE_URL=your_supabase_project_url
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
+### 4. راه‌اندازی پایگاه داده
+1. وارد Supabase Dashboard شوید
+2. فایل `database/schema.sql` را در SQL Editor اجرا کنید
+3. Storage bucket با نام `drug-images` ایجاد کنید
+
+### 5. اجرای پروژه
+```bash
+# حالت توسعه
+npm run dev
+
+# ساخت برای production
+npm run build
+```
+
+## 🚀 استقرار (Deployment)
+
+### استقرار روی Vercel
+
+#### روش اول: از طریق GitHub (توصیه شده)
+1. پروژه را به GitHub push کنید
+2. وارد [Vercel Dashboard](https://vercel.com) شوید
+3. روی "New Project" کلیک کنید
+4. مخزن GitHub را انتخاب کنید
+5. متغیرهای محیطی را در تنظیمات Vercel وارد کنید:
+   ```
+   VITE_SUPABASE_URL=your_supabase_url
+   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+   ```
+6. Deploy کنید
+
+#### روش دوم: از طریق CLI
+```bash
+# نصب Vercel CLI
+npm i -g vercel
+
+# وارد شدن به حساب
+vercel login
+
+# استقرار
+vercel --prod
+```
+
+### تنظیمات مهم برای Vercel:
+- **Framework**: Vite
+- **Build Command**: `npm run build`
+- **Output Directory**: `dist`
+- **Node.js Version**: 18.x
+
+### استقرار روی Netlify
+1. وارد [Netlify Dashboard](https://netlify.com) شوید
+2. "New site from Git" را انتخاب کنید
+3. مخزن GitHub را متصل کنید
+4. تنظیمات build:
+   ```
+   Build command: npm run build
+   Publish directory: dist
+   ```
+5. متغیرهای محیطی را در Environment variables اضافه کنید
+
+## 🗄️ پایگاه داده
+
+### ساختار جداول:
+- `drug_categories` - دسته‌بندی داروها
+- `users` - کاربران سیستم
+- `warehouses` - انبارها
+- `drugs` - اطلاعات داروها
+- `warehouse_inventory` - موجودی انبارها
+- `drug_movements` - تاریخچه انتقالات
+- `system_settings` - تنظیمات سیستم
+- `activity_logs` - لاگ فعالیت‌ها
 npm >= 8
 ```
 
