@@ -22,7 +22,7 @@ import {
   Key,
   Security
 } from '@mui/icons-material'
-import { supabase } from '../services/supabase'
+import { changePassword } from '../services/supabase'
 
 const ChangePassword = ({ open, onClose, currentUser }) => {
   const [formData, setFormData] = useState({
@@ -90,34 +90,18 @@ const ChangePassword = ({ open, onClose, currentUser }) => {
     setError('')
 
     try {
-      // بررسی رمز عبور فعلی از دیتابیس
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('password')
-        .eq('id', currentUser.id)
-        .single()
+      // تغییر رمز عبور با استفاده از تابع سرویس
+      const result = await changePassword(
+        currentUser.id, 
+        formData.currentPassword, 
+        formData.newPassword
+      )
 
-      if (userError || !userData) {
-        setError('خطا در دریافت اطلاعات کاربر')
+      if (result.error) {
+        setError(result.error.message)
         setLoading(false)
         return
       }
-
-      // بررسی رمز عبور فعلی (در پروژه واقعی باید از hashing استفاده کنید)
-      if (userData.password !== formData.currentPassword) {
-        setError('رمز عبور فعلی اشتباه است')
-        setLoading(false)
-        return
-      }
-
-      // به‌روزرسانی رمز عبور در دیتابیس
-      const { error: updateError } = await supabase
-        .from('users')
-        .update({ password: formData.newPassword })
-        .eq('id', currentUser.id)
-
-      if (updateError) {
-        setError('خطا در تغییر رمز عبور: ' + updateError.message)
         setLoading(false)
         return
       }

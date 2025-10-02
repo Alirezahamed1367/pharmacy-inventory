@@ -54,6 +54,48 @@ export const signOut = async () => {
   return { error }
 }
 
+// تغییر رمز عبور
+export const changePassword = async (userId, currentPassword, newPassword) => {
+  if (!supabase) {
+    return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
+  }
+
+  try {
+    // بررسی رمز عبور فعلی
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('password')
+      .eq('id', userId)
+      .single()
+
+    if (userError || !userData) {
+      return { error: { message: 'خطا در دریافت اطلاعات کاربر' } }
+    }
+
+    // بررسی رمز عبور فعلی
+    if (userData.password !== currentPassword) {
+      return { error: { message: 'رمز عبور فعلی اشتباه است' } }
+    }
+
+    // به‌روزرسانی رمز عبور
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ 
+        password: newPassword,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userId)
+
+    if (updateError) {
+      return { error: { message: 'خطا در تغییر رمز عبور: ' + updateError.message } }
+    }
+
+    return { error: null }
+  } catch (error) {
+    return { error: { message: 'خطا در تغییر رمز عبور: ' + error.message } }
+  }
+}
+
 // تابع ثبت‌نام کاربر جدید
 export const signUp = async (username, password, userData) => {
   if (!supabase) {
