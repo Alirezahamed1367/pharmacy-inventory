@@ -30,7 +30,7 @@ import {
   Delete as DeleteIcon,
   Image as ImageIcon
 } from '@mui/icons-material'
-import { supabase, getDrugs, addDrug, updateDrug, deleteDrug, uploadImage, getImageUrl } from '../services/supabase'
+import { supabase, getDrugs, addDrug, updateDrug, deleteDrug, uploadImage, getImageUrl, getWarehouses } from '../services/supabase'
 import ImageUpload from '../components/ImageUpload'
 import ImageViewer from '../components/ImageViewer'
 
@@ -62,14 +62,14 @@ const DrugManagement = () => {
     try {
       const [drugsResult, warehousesResult] = await Promise.all([
         getDrugs(),
-        supabase?.from('warehouses').select('*').eq('active', true)
+        getWarehouses()
       ])
 
       if (drugsResult.data) {
         setDrugs(drugsResult.data)
       }
 
-      if (warehousesResult?.data) {
+      if (warehousesResult.data) {
         setWarehouses(warehousesResult.data)
       }
     } catch (error) {

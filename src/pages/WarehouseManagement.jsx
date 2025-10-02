@@ -40,7 +40,13 @@ import TransferDialog from '../components/TransferDialog'
 import { ManagerSelect } from '../components/DropdownSelects'
 
 import { useEffect } from 'react'
-import { supabase } from '../services/supabase'
+import { 
+  getAllWarehouses, 
+  addWarehouse, 
+  updateWarehouse, 
+  deleteWarehouse, 
+  getWarehouseManagers 
+} from '../services/supabase'
 
 export default function WarehouseManagement() {
   const [warehouses, setWarehouses] = useState([])
@@ -67,20 +73,14 @@ export default function WarehouseManagement() {
     setError(null)
     try {
       // انبارها
-      const { data: warehousesData, error: warehousesError } = await supabase
-        .from('warehouses')
-        .select('*')
-        .order('name')
-      if (warehousesError) throw warehousesError
-      setWarehouses(warehousesData || [])
+      const warehousesResult = await getAllWarehouses()
+      if (warehousesResult.error) throw new Error(warehousesResult.error.message)
+      setWarehouses(warehousesResult.data || [])
 
       // مسئولان انبار (کاربران با نقش manager)
-      const { data: managersData, error: managersError } = await supabase
-        .from('users')
-        .select('id, full_name, role, phone')
-        .eq('role', 'manager')
-      if (managersError) throw managersError
-      setManagers(managersData || [])
+      const managersResult = await getWarehouseManagers()
+      if (managersResult.error) throw new Error(managersResult.error.message)
+      setManagers(managersResult.data || [])
     } catch (err) {
       setError(err.message || 'خطا در دریافت داده‌ها')
     } finally {
@@ -118,23 +118,20 @@ export default function WarehouseManagement() {
     setSelectedWarehouse(null)
   }
 
-  // افزودن یا ویرایش انبار در Supabase
+  // افزودن یا ویرایش انبار
   const handleSave = async () => {
     try {
+      let result
       if (selectedWarehouse) {
         // ویرایش
-        const { error } = await supabase
-          .from('warehouses')
-          .update({ ...formData })
-          .eq('id', selectedWarehouse.id)
-        if (error) throw error
+        result = await updateWarehouse(selectedWarehouse.id, formData)
       } else {
         // افزودن
-        const { error } = await supabase
-          .from('warehouses')
-          .insert([{ ...formData, active: true }])
-        if (error) throw error
+        result = await addWarehouse(formData)
       }
+      
+      if (result.error) throw new Error(result.error.message)
+      
       fetchAll()
       handleCloseDialog()
     } catch (err) {
@@ -142,15 +139,13 @@ export default function WarehouseManagement() {
     }
   }
 
-  // حذف انبار از Supabase
+  // حذف انبار
   const handleDelete = async (warehouseId) => {
     if (!window.confirm('آیا از حذف این انبار مطمئن هستید؟')) return
     try {
-      const { error } = await supabase
-        .from('warehouses')
-        .delete()
-        .eq('id', warehouseId)
-      if (error) throw error
+      const result = await deleteWarehouse(warehouseId)
+      if (result.error) throw new Error(result.error.message)
+      
       fetchAll()
     } catch (err) {
       setError(err.message || 'خطا در حذف انبار')

@@ -35,6 +35,12 @@ import {
   Warning as WarningIcon,
 } from '@mui/icons-material'
 import { supabase } from '../services/supabase'
+import { 
+  getInventoryView, 
+  getMovementsView, 
+  getWarehouses, 
+  getActiveDrugs 
+} from '../services/supabase'
 
 const Reports = () => {
   const [tabValue, setTabValue] = useState(0)
@@ -59,43 +65,28 @@ const Reports = () => {
     setLoading(true)
     try {
       // دریافت موجودی از view
-      const { data: inventoryData, error: inventoryError } = await supabase
-        .from('inventory_view')
-        .select('*')
-
-      if (inventoryError) throw inventoryError
+      const inventoryResult = await getInventoryView()
+      if (inventoryResult.error) throw new Error(inventoryResult.error.message)
 
       // دریافت حرکت‌ها از view
-      const { data: movementsData, error: movementsError } = await supabase
-        .from('movements_view')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (movementsError) throw movementsError
+      const movementsResult = await getMovementsView()
+      if (movementsResult.error) throw new Error(movementsResult.error.message)
 
       // دریافت انبارها
-      const { data: warehousesData, error: warehousesError } = await supabase
-        .from('warehouses')
-        .select('*')
-        .eq('active', true)
-
-      if (warehousesError) throw warehousesError
+      const warehousesResult = await getWarehouses()
+      if (warehousesResult.error) throw new Error(warehousesResult.error.message)
 
       // دریافت داروها
-      const { data: drugsData, error: drugsError } = await supabase
-        .from('drugs')
-        .select('*')
-        .eq('active', true)
+      const drugsResult = await getActiveDrugs()
+      if (drugsResult.error) throw new Error(drugsResult.error.message)
 
-      if (drugsError) throw drugsError
-
-      setInventory(inventoryData || [])
-      setMovements(movementsData || [])
-      setWarehouses(warehousesData || [])
-      setDrugs(drugsData || [])
+      setInventory(inventoryResult.data || [])
+      setMovements(movementsResult.data || [])
+      setWarehouses(warehousesResult.data || [])
+      setDrugs(drugsResult.data || [])
 
       // محاسبه داروهای در حال انقضا
-      const expiringDrugs = inventoryData?.filter(item => {
+      const expiringDrugs = inventoryResult.data?.filter(item => {
         if (!item.expiry_date) return false
         const expiryDate = new Date(item.expiry_date)
         const today = new Date()

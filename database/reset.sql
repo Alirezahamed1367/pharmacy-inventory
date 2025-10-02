@@ -1,98 +1,111 @@
--- 🔥 اسکریپت ریست کامل سیستم
--- ⚠️  هشدار: این اسکریپت تمام داده‌ها را حذف می‌کند!
--- 👨‍💻 طراحی: علیرضا حامد - پاییز 1404
--- 📧 Email: alireza.h67@gmail.com
+-- 🏥 اسکریپت ریست کامل سیستم مدیریت انبار داروخانه
+-- =====================================================
+-- 👨‍💻 طراحی و توسعه: علیرضا حامد - پاییز 1404
+-- 🎯 هدف: پاک کردن کامل دیتابیس برای شروع مجدد
+-- ⚠️  هشدار: این اسکریپت تمام داده‌ها را پاک می‌کند!
+-- =====================================================
 
--- ===== بررسی و هشدار =====
-DO $$
-BEGIN
-    RAISE NOTICE '🔥 شروع ریست کامل سیستم...';
-    RAISE NOTICE '⚠️  تمام داده‌ها حذف خواهند شد!';
-    RAISE NOTICE '📅 زمان: %', NOW();
-END $$;
+-- نمایش پیام هشدار
+SELECT 
+    '⚠️ شروع عملیات پاک‌سازی کامل دیتابیس' as warning,
+    '🗑️ تمام جداول، توابع و داده‌ها حذف خواهند شد' as notice,
+    now() as start_time;
 
--- ===== حذف کامل تمام جداول =====
-DROP TABLE IF EXISTS notifications CASCADE;
-DROP TABLE IF EXISTS transfers CASCADE;
-DROP TABLE IF EXISTS inventory_movements CASCADE;
-DROP TABLE IF EXISTS inventory CASCADE;
-DROP TABLE IF EXISTS drugs CASCADE;
-DROP TABLE IF EXISTS warehouses CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
+-- =====================================================
+-- حذف Views
+-- =====================================================
+DROP VIEW IF EXISTS public.inventory_view CASCADE;
+DROP VIEW IF EXISTS public.movements_view CASCADE;
 
--- حذف enum ها
-DROP TYPE IF EXISTS notification_type CASCADE;
-DROP TYPE IF EXISTS transfer_status CASCADE;
-DROP TYPE IF EXISTS movement_type CASCADE;
-DROP TYPE IF EXISTS user_role CASCADE;
+-- =====================================================
+-- حذف Policies (RLS)
+-- =====================================================
+DROP POLICY IF EXISTS "Users can view all users" ON public.users;
+DROP POLICY IF EXISTS "Users can view all warehouses" ON public.warehouses;
+DROP POLICY IF EXISTS "Users can view all drugs" ON public.drugs;
+DROP POLICY IF EXISTS "Only admins can modify users" ON public.users;
+DROP POLICY IF EXISTS "Only admins can modify warehouses" ON public.warehouses;
+DROP POLICY IF EXISTS "Authorized users can modify drugs" ON public.drugs;
 
--- حذف function ها
-DROP FUNCTION IF EXISTS update_modified_column() CASCADE;
-DROP FUNCTION IF EXISTS check_low_stock() CASCADE;
-DROP FUNCTION IF EXISTS check_expired_drugs() CASCADE;
+-- =====================================================
+-- حذف Triggers
+-- =====================================================
+DROP TRIGGER IF EXISTS update_users_updated_at ON public.users;
+DROP TRIGGER IF EXISTS update_warehouses_updated_at ON public.warehouses;
+DROP TRIGGER IF EXISTS update_drugs_updated_at ON public.drugs;
+DROP TRIGGER IF EXISTS update_inventory_updated_at ON public.warehouse_inventory;
+DROP TRIGGER IF EXISTS update_settings_updated_at ON public.system_settings;
 
--- ===== پاک کردن policies =====
-DO $$
-DECLARE
-    r RECORD;
-BEGIN
-    FOR r IN (SELECT schemaname, tablename, policyname FROM pg_policies WHERE schemaname = 'public')
-    LOOP
-        EXECUTE 'DROP POLICY IF EXISTS "' || r.policyname || '" ON ' || r.schemaname || '.' || r.tablename || ' CASCADE';
-    END LOOP;
-    
-    RAISE NOTICE '✅ تمام policies حذف شدند';
-END $$;
+-- =====================================================
+-- حذف Functions
+-- =====================================================
+DROP FUNCTION IF EXISTS public.update_updated_at_column() CASCADE;
 
--- ===== پاک کردن Storage (اختیاری) =====
-/*
--- اگر از Supabase Storage استفاده می‌کنید
-DELETE FROM storage.objects WHERE bucket_id = 'drug-images';
-*/
+-- =====================================================
+-- حذف Indexes
+-- =====================================================
+DROP INDEX IF EXISTS public.idx_users_username;
+DROP INDEX IF EXISTS public.idx_users_role;
+DROP INDEX IF EXISTS public.idx_users_warehouse_id;
+DROP INDEX IF EXISTS public.idx_warehouses_name;
+DROP INDEX IF EXISTS public.idx_warehouses_active;
+DROP INDEX IF EXISTS public.idx_drugs_name;
+DROP INDEX IF EXISTS public.idx_drugs_barcode;
+DROP INDEX IF EXISTS public.idx_drugs_category_id;
+DROP INDEX IF EXISTS public.idx_drugs_active;
+DROP INDEX IF EXISTS public.idx_inventory_warehouse_id;
+DROP INDEX IF EXISTS public.idx_inventory_drug_id;
+DROP INDEX IF EXISTS public.idx_inventory_expire_date;
+DROP INDEX IF EXISTS public.idx_movements_drug_id;
+DROP INDEX IF EXISTS public.idx_movements_status;
+DROP INDEX IF EXISTS public.idx_movements_date;
+DROP INDEX IF EXISTS public.idx_activity_logs_user_id;
+DROP INDEX IF EXISTS public.idx_activity_logs_created_at;
 
--- ===== بازسازی سیستم =====
-\i schema.sql
+-- =====================================================
+-- حذف جداول به ترتیب وابستگی
+-- =====================================================
+DROP TABLE IF EXISTS public.activity_logs CASCADE;
+DROP TABLE IF EXISTS public.drug_movements CASCADE;
+DROP TABLE IF EXISTS public.warehouse_inventory CASCADE;
+DROP TABLE IF EXISTS public.drugs CASCADE;
+DROP TABLE IF EXISTS public.drug_categories CASCADE;
+DROP TABLE IF EXISTS public.system_settings CASCADE;
+DROP TABLE IF EXISTS public.users CASCADE;
+DROP TABLE IF EXISTS public.warehouses CASCADE;
 
--- ===== بررسی نهایی =====
-DO $$
-DECLARE
-    table_count INTEGER;
-    user_count INTEGER;
-    warehouse_count INTEGER;
-BEGIN
-    SELECT COUNT(*) INTO table_count 
-    FROM information_schema.tables 
-    WHERE table_schema = 'public' AND table_type = 'BASE TABLE';
-    
-    SELECT COUNT(*) INTO user_count FROM users;
-    SELECT COUNT(*) INTO warehouse_count FROM warehouses;
-    
-    RAISE NOTICE '✅ ریست کامل با موفقیت انجام شد!';
-    RAISE NOTICE '📊 آماره‌های سیستم:';
-    RAISE NOTICE '   📋 تعداد جداول: %', table_count;
-    RAISE NOTICE '   👥 تعداد کاربران: %', user_count;
-    RAISE NOTICE '   🏢 تعداد انبارها: %', warehouse_count;
-    RAISE NOTICE '👨‍💻 سیستم توسط علیرضا حامد بازسازی شد';
-    RAISE NOTICE '🕐 زمان تکمیل: %', NOW();
-END $$;
+-- حذف جداول قدیمی احتمالی
+DROP TABLE IF EXISTS public.notifications CASCADE;
+DROP TABLE IF EXISTS public.transfers CASCADE;
+DROP TABLE IF EXISTS public.inventory_movements CASCADE;
+DROP TABLE IF EXISTS public.inventory CASCADE;
 
--- ===== راهنمای استفاده =====
-/*
-💡 روش‌های اجرا:
+-- =====================================================
+-- حذف ENUMs قدیمی احتمالی
+-- =====================================================
+DROP TYPE IF EXISTS public.notification_type CASCADE;
+DROP TYPE IF EXISTS public.transfer_status CASCADE;
+DROP TYPE IF EXISTS public.movement_type CASCADE;
+DROP TYPE IF EXISTS public.user_role CASCADE;
 
-1️⃣ در Supabase SQL Editor:
-   کپی و paste کردن محتویات این فایل
+-- =====================================================
+-- حذف Storage Buckets (اختیاری)
+-- =====================================================
+-- DELETE FROM storage.buckets WHERE id = 'drug-images';
+-- این خط در صورت نیاز به پاک کردن فایل‌های آپلود شده فعال شود
 
-2️⃣ از طریق psql:
-   psql -h host -U user -d database -f reset.sql
+-- =====================================================
+-- بررسی و گزارش نهایی
+-- =====================================================
+SELECT 
+    '✅ عملیات پاک‌سازی کامل با موفقیت انجام شد' as success,
+    '🔄 سیستم آماده نصب مجدد است' as ready,
+    '👨‍💻 توسط: علیرضا حامد - پاییز 1404' as developer,
+    now() as completion_time;
 
-3️⃣ در محیط توسعه:
-   npm run db:reset
-
-⚠️  نکات مهم:
-   - همیشه قبل از ریست backup بگیرید
-   - در production استفاده نکنید
-   - فقط برای توسعه و تست
-
-📞 پشتیبانی: alireza.h67@gmail.com
-*/
+-- =====================================================
+-- آمادگی برای اجرای schema.sql
+-- =====================================================
+SELECT 
+    '📋 مرحله بعد: اجرای schema.sql برای ایجاد جداول جدید' as next_step,
+    '📂 سپس: اجرای sample_data.sql برای داده‌های نمونه' as then_step;

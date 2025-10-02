@@ -237,72 +237,48 @@ export const getDrugs = async () => {
   }
 
   try {
-    // Get drugs with their inventory information from the view
+    // Get drugs with basic information
     const { data, error } = await supabase
-      .from('inventory_view')
-      .select('*')
-      .order('drug_name')
+      .from('drugs')
+      .select(`
+        *,
+        drug_categories (
+          name
+        )
+      `)
+      .eq('active', true)
+      .order('name')
 
-    // If the view doesn't exist yet, fall back to joining tables manually
-    if (error && error.message.includes('does not exist')) {
-      const { data: fallbackData, error: fallbackError } = await supabase
-        .from('drugs')
-        .select(`
-          *,
-          warehouse_inventory (
-            id,
-            warehouse_id,
-            quantity,
-            unit_cost,
-            expire_date,
-            warehouses (
-              id,
-              name
-            )
-          )
-        `)
-        .eq('active', true)
-        .order('name')
-
-      // Transform the data to match expected format
-      const transformedData = fallbackData?.map(drug => {
-        const inventory = drug.warehouse_inventory?.[0] || {}
-        return {
-          ...drug,
-          warehouse_id: inventory.warehouse_id,
-          warehouse_name: inventory.warehouses?.name,
-          quantity: inventory.quantity || 0,
-          expiry_date: inventory.expire_date,
-          price: drug.unit_price
-        }
-      }) || []
-
-      return { data: transformedData, error: fallbackError }
+    if (error) {
+      console.error('Error fetching drugs:', error)
+      return { data: [], error }
     }
 
-    // Transform view data to match expected format
-    const transformedData = data?.map(item => ({
-      id: item.id,
-      name: item.drug_name,
-      generic_name: item.generic_name,
-      description: item.description,
-      dosage: item.dosage,
-      form: item.form,
-      manufacturer: item.manufacturer,
-      category: item.category_name || 'عمومی',
-      image_url: item.image_url,
-      barcode: item.barcode,
-      warehouse_id: item.warehouse_id,
-      warehouse_name: item.warehouse_name,
-      quantity: item.quantity || 0,
-      expiry_date: item.expire_date,
-      price: item.unit_cost,
-      unit_price: item.unit_cost,
-      active: true
+    // Transform data to match expected format
+    const transformedData = data?.map(drug => ({
+      id: drug.id,
+      name: drug.name,
+      generic_name: drug.generic_name,
+      description: drug.description,
+      dosage: drug.dosage,
+      form: drug.form,
+      manufacturer: drug.manufacturer,
+      category: drug.drug_categories?.name || 'عمومی',
+      features: drug.features,
+      image_url: drug.image_url,
+      barcode: drug.barcode,
+      min_stock_level: drug.min_stock_level,
+      max_stock_level: drug.max_stock_level,
+      price: drug.unit_price,
+      unit_price: drug.unit_price,
+      active: drug.active,
+      created_at: drug.created_at,
+      updated_at: drug.updated_at
     })) || []
 
-    return { data: transformedData, error }
+    return { data: transformedData, error: null }
   } catch (error) {
+    console.error('Exception in getDrugs:', error)
     return { data: [], error: { message: 'خطا در دریافت داروها: ' + error.message } }
   }
 }
@@ -464,5 +440,187 @@ const getCurrentUserId = () => {
     return currentUser.id || null
   } catch {
     return null
+  }
+}
+
+// دریافت لیست انبارها
+export const getWarehouses = async () => {
+  if (!supabase) {
+    return { data: [], error: null }
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('warehouses')
+      .select('*')
+      .eq('active', true)
+      .order('name')
+
+    return { data: data || [], error }
+  } catch (error) {
+    return { data: [], error: { message: 'خطا در دریافت انبارها: ' + error.message } }
+  }
+}
+
+// دریافت تمام انبارها (شامل غیرفعال)
+export const getAllWarehouses = async () => {
+  if (!supabase) {
+    return { data: [], error: null }
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('warehouses')
+      .select('*')
+      .order('name')
+
+    return { data: data || [], error }
+  } catch (error) {
+    return { data: [], error: { message: 'خطا در دریافت انبارها: ' + error.message } }
+  }
+}
+
+// افزودن انبار جدید
+export const addWarehouse = async (warehouseData) => {
+  if (!supabase) {
+    return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('warehouses')
+      .insert([{ ...warehouseData, active: true }])
+      .select()
+
+    if (error) {
+      return { error }
+    }
+
+    return { data: data[0], error: null }
+  } catch (error) {
+    return { error: { message: 'خطا در افزودن انبار: ' + error.message } }
+  }
+}
+
+// ویرایش انبار
+export const updateWarehouse = async (id, warehouseData) => {
+  if (!supabase) {
+    return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('warehouses')
+      .update({ ...warehouseData, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+
+    if (error) {
+      return { error }
+    }
+
+    return { data: data[0], error: null }
+  } catch (error) {
+    return { error: { message: 'خطا در ویرایش انبار: ' + error.message } }
+  }
+}
+
+// حذف انبار
+export const deleteWarehouse = async (id) => {
+  if (!supabase) {
+    return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
+  }
+
+  try {
+    const { error } = await supabase
+      .from('warehouses')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      return { error }
+    }
+
+    return { error: null }
+  } catch (error) {
+    return { error: { message: 'خطا در حذف انبار: ' + error.message } }
+  }
+}
+
+// دریافت مدیران انبار
+export const getWarehouseManagers = async () => {
+  if (!supabase) {
+    return { data: [], error: null }
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, full_name, role, phone')
+      .eq('role', 'manager')
+      .eq('active', true)
+      .order('full_name')
+
+    return { data: data || [], error }
+  } catch (error) {
+    return { data: [], error: { message: 'خطا در دریافت مدیران: ' + error.message } }
+  }
+}
+
+// =====================================================
+// توابع گزارش‌گیری
+// =====================================================
+
+// دریافت موجودی از view
+export const getInventoryView = async () => {
+  if (!supabase) {
+    return { data: [], error: null }
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('inventory_view')
+      .select('*')
+
+    return { data: data || [], error }
+  } catch (error) {
+    return { data: [], error: { message: 'خطا در دریافت موجودی: ' + error.message } }
+  }
+}
+
+// دریافت حرکات از view
+export const getMovementsView = async () => {
+  if (!supabase) {
+    return { data: [], error: null }
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('movements_view')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    return { data: data || [], error }
+  } catch (error) {
+    return { data: [], error: { message: 'خطا در دریافت حرکات: ' + error.message } }
+  }
+}
+
+// دریافت تمام داروهای فعال (برای گزارش‌ها)
+export const getActiveDrugs = async () => {
+  if (!supabase) {
+    return { data: [], error: null }
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('drugs')
+      .select('*')
+      .eq('active', true)
+      .order('name')
+
+    return { data: data || [], error }
+  } catch (error) {
+    return { data: [], error: { message: 'خطا در دریافت داروها: ' + error.message } }
   }
 }
