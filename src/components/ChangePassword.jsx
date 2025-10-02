@@ -102,9 +102,6 @@ const ChangePassword = ({ open, onClose, currentUser }) => {
         setLoading(false)
         return
       }
-        setLoading(false)
-        return
-      }
 
       setSuccess(true)
       setFormData({

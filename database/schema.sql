@@ -1,346 +1,688 @@
--- 🏥 سیستم مدیریت انبار داروخانه - Production Schema-- 🏥 سیستم مدیریت انبار داروخانه - Schema نهایی-- 🏥 سیستم مدیریت انبار داروخانه - Schema نهایی-- =====================================================
+-- =====================================================-- 🏥 سیستم مدیریت انبار داروخانه - Production Schema-- 🏥 سیستم مدیریت انبار داروخانه - Schema نهایی-- 🏥 سیستم مدیریت انبار داروخانه - Schema نهایی-- =====================================================
+
+-- Pharmacy Inventory Management System Database Schema
+
+-- طراحی و توسعه توسط علیرضا حامد - پاییز 1404-- =====================================================
 
 -- =====================================================
 
 -- 👨‍💻 طراحی و توسعه: علیرضا حامد - پاییز 1404-- =====================================================
 
--- 📧 Email: alireza.h67@gmail.com
+-- حذف جداول موجود برای شروع از صفر
 
--- 🎯 نسخه: Production Ready v1.0-- 👨‍💻 طراحی و توسعه: علیرضا حامد - پاییز 1404-- =====================================================-- سیستم انبارداری دارو - اسکریپت دیتابیس (نسخه نهایی و صحیح)
+DROP TABLE IF EXISTS public.activity_logs CASCADE;-- 📧 Email: alireza.h67@gmail.com
 
--- =====================================================
+DROP TABLE IF EXISTS public.system_settings CASCADE;
 
--- 📧 Email: alireza.h67@gmail.com
+DROP TABLE IF EXISTS public.drug_movements CASCADE;-- 🎯 نسخه: Production Ready v1.0-- 👨‍💻 طراحی و توسعه: علیرضا حامد - پاییز 1404-- =====================================================-- سیستم انبارداری دارو - اسکریپت دیتابیس (نسخه نهایی و صحیح)
+
+DROP TABLE IF EXISTS public.warehouse_inventory CASCADE;
+
+DROP TABLE IF EXISTS public.drugs CASCADE;-- =====================================================
+
+DROP TABLE IF EXISTS public.warehouses CASCADE;
+
+DROP TABLE IF EXISTS public.users CASCADE;-- 📧 Email: alireza.h67@gmail.com
+
+DROP TABLE IF EXISTS public.drug_categories CASCADE;
 
 -- حذف جداول موجود
 
-DROP TABLE IF EXISTS public.activity_logs CASCADE;-- 🎯 نسخه: Production Ready v1.0-- 👨‍💻 طراحی و توسعه: علیرضا حامد - پاییز 1404-- طراحی و توسعه: علیرضا حامد - پاییز 1404
-
-DROP TABLE IF EXISTS public.drug_movements CASCADE;
-
-DROP TABLE IF EXISTS public.warehouse_inventory CASCADE;-- =====================================================
-
-DROP TABLE IF EXISTS public.drugs CASCADE;
-
-DROP TABLE IF EXISTS public.drug_categories CASCADE;-- 📧 Email: alireza.h67@gmail.com-- =====================================================
-
-DROP TABLE IF EXISTS public.system_settings CASCADE;
-
-DROP TABLE IF EXISTS public.users CASCADE;-- پاک کردن جداول موجود برای شروع از صفر
-
-DROP TABLE IF EXISTS public.warehouses CASCADE;
-
-DROP TABLE IF EXISTS public.activity_logs CASCADE;-- 🎯 نسخه: Production Ready
-
--- =====================================================
-
--- =====================================================
--- Pharmacy Inventory Management System Database Schema
--- طراحی و توسعه توسط علیرضا حامد - پاییز 1404
--- =====================================================
-
--- حذف جداول موجود برای شروع از صفر
-DROP TABLE IF EXISTS public.activity_logs CASCADE;
-DROP TABLE IF EXISTS public.system_settings CASCADE;
-DROP TABLE IF EXISTS public.drug_movements CASCADE;
-DROP TABLE IF EXISTS public.warehouse_inventory CASCADE;
-DROP TABLE IF EXISTS public.drugs CASCADE;
-DROP TABLE IF EXISTS public.warehouses CASCADE;
-DROP TABLE IF EXISTS public.users CASCADE;
-DROP TABLE IF EXISTS public.drug_categories CASCADE;
-
 -- حذف ویوهای موجود
-DROP VIEW IF EXISTS public.inventory_view CASCADE;
+
+DROP VIEW IF EXISTS public.inventory_view CASCADE;DROP TABLE IF EXISTS public.activity_logs CASCADE;-- 🎯 نسخه: Production Ready v1.0-- 👨‍💻 طراحی و توسعه: علیرضا حامد - پاییز 1404-- طراحی و توسعه: علیرضا حامد - پاییز 1404
+
 DROP VIEW IF EXISTS public.movements_view CASCADE;
 
+DROP TABLE IF EXISTS public.drug_movements CASCADE;
+
 -- =====================================================
--- جدول دسته‌بندی داروها
+
+-- جدول دسته‌بندی داروهاDROP TABLE IF EXISTS public.warehouse_inventory CASCADE;-- =====================================================
+
 -- =====================================================
-CREATE TABLE public.drug_categories (
+
+CREATE TABLE public.drug_categories (DROP TABLE IF EXISTS public.drugs CASCADE;
+
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
+
+    name VARCHAR(100) NOT NULL,DROP TABLE IF EXISTS public.drug_categories CASCADE;-- 📧 Email: alireza.h67@gmail.com-- =====================================================
+
     description TEXT,
-    active BOOLEAN DEFAULT true,
+
+    active BOOLEAN DEFAULT true,DROP TABLE IF EXISTS public.system_settings CASCADE;
+
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULLDROP TABLE IF EXISTS public.users CASCADE;-- پاک کردن جداول موجود برای شروع از صفر
+
 );
 
+DROP TABLE IF EXISTS public.warehouses CASCADE;
+
 -- ایندکس برای جستجوی سریع
-CREATE INDEX idx_drug_categories_name ON public.drug_categories(name);
+
+CREATE INDEX idx_drug_categories_name ON public.drug_categories(name);DROP TABLE IF EXISTS public.activity_logs CASCADE;-- 🎯 نسخه: Production Ready
+
 CREATE INDEX idx_drug_categories_active ON public.drug_categories(active);
 
 -- =====================================================
--- جدول کاربران
+
 -- =====================================================
-CREATE TABLE public.users (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+
+-- جدول کاربران-- =====================================================
+
+-- =====================================================-- Pharmacy Inventory Management System Database Schema
+
+CREATE TABLE public.users (-- طراحی و توسعه توسط علیرضا حامد - پاییز 1404
+
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,-- =====================================================
+
     username VARCHAR(50) UNIQUE NOT NULL,
-    password VARCHAR(255) NOT NULL,
-    full_name VARCHAR(100) NOT NULL,
-    email VARCHAR(100),
-    phone VARCHAR(20),
-    role VARCHAR(20) DEFAULT 'user' CHECK (role IN ('superadmin', 'admin', 'manager', 'user')),
-    active BOOLEAN DEFAULT true,
-    last_login TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+
+    password VARCHAR(255) NOT NULL,-- حذف جداول موجود برای شروع از صفر
+
+    full_name VARCHAR(100) NOT NULL,DROP TABLE IF EXISTS public.activity_logs CASCADE;
+
+    email VARCHAR(100),DROP TABLE IF EXISTS public.system_settings CASCADE;
+
+    phone VARCHAR(20),DROP TABLE IF EXISTS public.drug_movements CASCADE;
+
+    role VARCHAR(20) DEFAULT 'user' CHECK (role IN ('superadmin', 'admin', 'manager', 'user')),DROP TABLE IF EXISTS public.warehouse_inventory CASCADE;
+
+    active BOOLEAN DEFAULT true,DROP TABLE IF EXISTS public.drugs CASCADE;
+
+    last_login TIMESTAMP WITH TIME ZONE,DROP TABLE IF EXISTS public.warehouses CASCADE;
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,DROP TABLE IF EXISTS public.users CASCADE;
+
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULLDROP TABLE IF EXISTS public.drug_categories CASCADE;
+
 );
 
--- ایندکس‌ها
-CREATE INDEX idx_users_username ON public.users(username);
+-- حذف ویوهای موجود
+
+-- ایندکس‌هاDROP VIEW IF EXISTS public.inventory_view CASCADE;
+
+CREATE INDEX idx_users_username ON public.users(username);DROP VIEW IF EXISTS public.movements_view CASCADE;
+
 CREATE INDEX idx_users_role ON public.users(role);
-CREATE INDEX idx_users_active ON public.users(active);
 
--- =====================================================
--- جدول انبارها
--- =====================================================
-CREATE TABLE public.warehouses (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    description TEXT,
-    address TEXT,
-    phone VARCHAR(20),
+CREATE INDEX idx_users_active ON public.users(active);-- =====================================================
+
+-- جدول دسته‌بندی داروها
+
+-- =====================================================-- =====================================================
+
+-- جدول انبارهاCREATE TABLE public.drug_categories (
+
+-- =====================================================    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+
+CREATE TABLE public.warehouses (    name VARCHAR(100) NOT NULL,
+
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,    description TEXT,
+
+    name VARCHAR(100) NOT NULL,    active BOOLEAN DEFAULT true,
+
+    description TEXT,    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+
+    address TEXT,    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+
+    phone VARCHAR(20),);
+
     manager_id UUID REFERENCES public.users(id),
-    capacity INTEGER DEFAULT 1000,
-    active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+
+    capacity INTEGER DEFAULT 1000,-- ایندکس برای جستجوی سریع
+
+    active BOOLEAN DEFAULT true,CREATE INDEX idx_drug_categories_name ON public.drug_categories(name);
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,CREATE INDEX idx_drug_categories_active ON public.drug_categories(active);
+
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
 
--- ایندکس‌ها
-CREATE INDEX idx_warehouses_name ON public.warehouses(name);
-CREATE INDEX idx_warehouses_manager ON public.warehouses(manager_id);
-CREATE INDEX idx_warehouses_active ON public.warehouses(active);
+);-- =====================================================
 
--- =====================================================
--- جدول داروها
--- =====================================================
-CREATE TABLE public.drugs (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    name VARCHAR(200) NOT NULL,
-    generic_name VARCHAR(200),
-    description TEXT,
-    dosage VARCHAR(100),
+-- جدول کاربران
+
+-- ایندکس‌ها-- =====================================================
+
+CREATE INDEX idx_warehouses_name ON public.warehouses(name);CREATE TABLE public.users (
+
+CREATE INDEX idx_warehouses_manager ON public.warehouses(manager_id);    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+
+CREATE INDEX idx_warehouses_active ON public.warehouses(active);    username VARCHAR(50) UNIQUE NOT NULL,
+
+    password VARCHAR(255) NOT NULL,
+
+-- =====================================================    full_name VARCHAR(100) NOT NULL,
+
+-- جدول داروها    email VARCHAR(100),
+
+-- =====================================================    phone VARCHAR(20),
+
+CREATE TABLE public.drugs (    role VARCHAR(20) DEFAULT 'user' CHECK (role IN ('superadmin', 'admin', 'manager', 'user')),
+
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,    active BOOLEAN DEFAULT true,
+
+    name VARCHAR(200) NOT NULL,    last_login TIMESTAMP WITH TIME ZONE,
+
+    generic_name VARCHAR(200),    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+
+    description TEXT,    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+
+    dosage VARCHAR(100),);
+
     form VARCHAR(50),
-    manufacturer VARCHAR(100),
-    category_id UUID REFERENCES public.drug_categories(id),
-    features TEXT,
-    image_url TEXT,
+
+    manufacturer VARCHAR(100),-- ایندکس‌ها
+
+    category_id UUID REFERENCES public.drug_categories(id),CREATE INDEX idx_users_username ON public.users(username);
+
+    features TEXT,CREATE INDEX idx_users_role ON public.users(role);
+
+    image_url TEXT,CREATE INDEX idx_users_active ON public.users(active);
+
     barcode VARCHAR(100),
-    min_stock_level INTEGER DEFAULT 0,
-    max_stock_level INTEGER DEFAULT 1000,
+
+    min_stock_level INTEGER DEFAULT 0,-- =====================================================
+
+    max_stock_level INTEGER DEFAULT 1000,-- جدول انبارها
+
+    unit_price DECIMAL(10,2) DEFAULT 0,-- =====================================================
+
+    active BOOLEAN DEFAULT true,CREATE TABLE public.warehouses (
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL    name VARCHAR(100) NOT NULL,
+
+);    description TEXT,
+
+    address TEXT,
+
+-- ایندکس‌ها    phone VARCHAR(20),
+
+CREATE INDEX idx_drugs_name ON public.drugs(name);    manager_id UUID REFERENCES public.users(id),
+
+CREATE INDEX idx_drugs_generic_name ON public.drugs(generic_name);    capacity INTEGER DEFAULT 1000,
+
+CREATE INDEX idx_drugs_category ON public.drugs(category_id);    active BOOLEAN DEFAULT true,
+
+CREATE INDEX idx_drugs_barcode ON public.drugs(barcode);    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+
+CREATE INDEX idx_drugs_active ON public.drugs(active);    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+
+);
+
+-- =====================================================
+
+-- جدول موجودی انبار-- ایندکس‌ها
+
+-- =====================================================CREATE INDEX idx_warehouses_name ON public.warehouses(name);
+
+CREATE TABLE public.warehouse_inventory (CREATE INDEX idx_warehouses_manager ON public.warehouses(manager_id);
+
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,CREATE INDEX idx_warehouses_active ON public.warehouses(active);
+
+    warehouse_id UUID REFERENCES public.warehouses(id) ON DELETE CASCADE,
+
+    drug_id UUID REFERENCES public.drugs(id) ON DELETE CASCADE,-- =====================================================
+
+    batch_number VARCHAR(100),-- جدول داروها
+
+    quantity INTEGER DEFAULT 0,-- =====================================================
+
+    unit_cost DECIMAL(10,2) DEFAULT 0,CREATE TABLE public.drugs (
+
+    manufacture_date DATE,    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+
+    expire_date DATE,    name VARCHAR(200) NOT NULL,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,    generic_name VARCHAR(200),
+
+    last_updated TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,    description TEXT,
+
+        dosage VARCHAR(100),
+
+    UNIQUE(warehouse_id, drug_id, batch_number)    form VARCHAR(50),
+
+);    manufacturer VARCHAR(100),
+
+    category_id UUID REFERENCES public.drug_categories(id),
+
+-- ایندکس‌ها    features TEXT,
+
+CREATE INDEX idx_warehouse_inventory_warehouse ON public.warehouse_inventory(warehouse_id);    image_url TEXT,
+
+CREATE INDEX idx_warehouse_inventory_drug ON public.warehouse_inventory(drug_id);    barcode VARCHAR(100),
+
+CREATE INDEX idx_warehouse_inventory_expire ON public.warehouse_inventory(expire_date);    min_stock_level INTEGER DEFAULT 0,
+
+CREATE INDEX idx_warehouse_inventory_batch ON public.warehouse_inventory(batch_number);    max_stock_level INTEGER DEFAULT 1000,
+
     unit_price DECIMAL(10,2) DEFAULT 0,
-    active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
 
--- ایندکس‌ها
-CREATE INDEX idx_drugs_name ON public.drugs(name);
-CREATE INDEX idx_drugs_generic_name ON public.drugs(generic_name);
-CREATE INDEX idx_drugs_category ON public.drugs(category_id);
-CREATE INDEX idx_drugs_barcode ON public.drugs(barcode);
-CREATE INDEX idx_drugs_active ON public.drugs(active);
+-- =====================================================    active BOOLEAN DEFAULT true,
 
--- =====================================================
--- جدول موجودی انبار
--- =====================================================
-CREATE TABLE public.warehouse_inventory (
+-- جدول حرکات دارو    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+
+-- =====================================================    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+
+CREATE TABLE public.drug_movements ();
+
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    warehouse_id UUID REFERENCES public.warehouses(id) ON DELETE CASCADE,
-    drug_id UUID REFERENCES public.drugs(id) ON DELETE CASCADE,
-    batch_number VARCHAR(100),
-    quantity INTEGER DEFAULT 0,
-    unit_cost DECIMAL(10,2) DEFAULT 0,
-    manufacture_date DATE,
+
+    drug_id UUID REFERENCES public.drugs(id) ON DELETE CASCADE,-- ایندکس‌ها
+
+    warehouse_id UUID REFERENCES public.warehouses(id) ON DELETE CASCADE,CREATE INDEX idx_drugs_name ON public.drugs(name);
+
+    movement_type VARCHAR(20) NOT NULL CHECK (movement_type IN ('in', 'out', 'transfer', 'adjustment')),CREATE INDEX idx_drugs_generic_name ON public.drugs(generic_name);
+
+    quantity INTEGER NOT NULL,CREATE INDEX idx_drugs_category ON public.drugs(category_id);
+
+    unit_cost DECIMAL(10,2),CREATE INDEX idx_drugs_barcode ON public.drugs(barcode);
+
+    batch_number VARCHAR(100),CREATE INDEX idx_drugs_active ON public.drugs(active);
+
     expire_date DATE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    last_updated TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    
-    UNIQUE(warehouse_id, drug_id, batch_number)
-);
 
--- ایندکس‌ها
-CREATE INDEX idx_warehouse_inventory_warehouse ON public.warehouse_inventory(warehouse_id);
-CREATE INDEX idx_warehouse_inventory_drug ON public.warehouse_inventory(drug_id);
-CREATE INDEX idx_warehouse_inventory_expire ON public.warehouse_inventory(expire_date);
-CREATE INDEX idx_warehouse_inventory_batch ON public.warehouse_inventory(batch_number);
+    from_warehouse_id UUID REFERENCES public.warehouses(id),-- =====================================================
 
--- =====================================================
--- جدول حرکات دارو
--- =====================================================
-CREATE TABLE public.drug_movements (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    to_warehouse_id UUID REFERENCES public.warehouses(id),-- جدول موجودی انبار
+
+    user_id UUID REFERENCES public.users(id),-- =====================================================
+
+    notes TEXT,CREATE TABLE public.warehouse_inventory (
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+
+);    warehouse_id UUID REFERENCES public.warehouses(id) ON DELETE CASCADE,
+
     drug_id UUID REFERENCES public.drugs(id) ON DELETE CASCADE,
-    warehouse_id UUID REFERENCES public.warehouses(id) ON DELETE CASCADE,
-    movement_type VARCHAR(20) NOT NULL CHECK (movement_type IN ('in', 'out', 'transfer', 'adjustment')),
-    quantity INTEGER NOT NULL,
-    unit_cost DECIMAL(10,2),
-    batch_number VARCHAR(100),
-    expire_date DATE,
-    from_warehouse_id UUID REFERENCES public.warehouses(id),
-    to_warehouse_id UUID REFERENCES public.warehouses(id),
-    user_id UUID REFERENCES public.users(id),
-    notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
 
--- ایندکس‌ها
-CREATE INDEX idx_drug_movements_drug ON public.drug_movements(drug_id);
-CREATE INDEX idx_drug_movements_warehouse ON public.drug_movements(warehouse_id);
-CREATE INDEX idx_drug_movements_type ON public.drug_movements(movement_type);
-CREATE INDEX idx_drug_movements_date ON public.drug_movements(created_at);
+-- ایندکس‌ها    batch_number VARCHAR(100),
 
--- =====================================================
--- جدول تنظیمات سیستم
--- =====================================================
-CREATE TABLE public.system_settings (
+CREATE INDEX idx_drug_movements_drug ON public.drug_movements(drug_id);    quantity INTEGER DEFAULT 0,
+
+CREATE INDEX idx_drug_movements_warehouse ON public.drug_movements(warehouse_id);    unit_cost DECIMAL(10,2) DEFAULT 0,
+
+CREATE INDEX idx_drug_movements_type ON public.drug_movements(movement_type);    manufacture_date DATE,
+
+CREATE INDEX idx_drug_movements_date ON public.drug_movements(created_at);    expire_date DATE,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+
+-- =====================================================    last_updated TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+
+-- جدول تنظیمات سیستم    
+
+-- =====================================================    UNIQUE(warehouse_id, drug_id, batch_number)
+
+CREATE TABLE public.system_settings ();
+
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    setting_key VARCHAR(100) UNIQUE NOT NULL,
-    setting_value TEXT,
-    description TEXT,
-    updated_by UUID REFERENCES public.users(id),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+
+    setting_key VARCHAR(100) UNIQUE NOT NULL,-- ایندکس‌ها
+
+    setting_value TEXT,CREATE INDEX idx_warehouse_inventory_warehouse ON public.warehouse_inventory(warehouse_id);
+
+    description TEXT,CREATE INDEX idx_warehouse_inventory_drug ON public.warehouse_inventory(drug_id);
+
+    updated_by UUID REFERENCES public.users(id),CREATE INDEX idx_warehouse_inventory_expire ON public.warehouse_inventory(expire_date);
+
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULLCREATE INDEX idx_warehouse_inventory_batch ON public.warehouse_inventory(batch_number);
+
 );
 
 -- =====================================================
--- جدول گزارش فعالیت‌ها
--- =====================================================
-CREATE TABLE public.activity_logs (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    user_id UUID REFERENCES public.users(id),
-    action VARCHAR(100) NOT NULL,
-    table_name VARCHAR(50),
-    record_id UUID,
-    old_data JSONB,
-    new_data JSONB,
-    ip_address INET,
-    user_agent TEXT,
+
+-- =====================================================-- جدول حرکات دارو
+
+-- جدول گزارش فعالیت‌ها-- =====================================================
+
+-- =====================================================CREATE TABLE public.drug_movements (
+
+CREATE TABLE public.activity_logs (    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,    drug_id UUID REFERENCES public.drugs(id) ON DELETE CASCADE,
+
+    user_id UUID REFERENCES public.users(id),    warehouse_id UUID REFERENCES public.warehouses(id) ON DELETE CASCADE,
+
+    action VARCHAR(100) NOT NULL,    movement_type VARCHAR(20) NOT NULL CHECK (movement_type IN ('in', 'out', 'transfer', 'adjustment')),
+
+    table_name VARCHAR(50),    quantity INTEGER NOT NULL,
+
+    record_id UUID,    unit_cost DECIMAL(10,2),
+
+    old_data JSONB,    batch_number VARCHAR(100),
+
+    new_data JSONB,    expire_date DATE,
+
+    ip_address INET,    from_warehouse_id UUID REFERENCES public.warehouses(id),
+
+    user_agent TEXT,    to_warehouse_id UUID REFERENCES public.warehouses(id),
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL    user_id UUID REFERENCES public.users(id),
+
+);    notes TEXT,
+
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
 
--- ایندکس‌ها
+-- ایندکس‌ها);
+
 CREATE INDEX idx_activity_logs_user ON public.activity_logs(user_id);
-CREATE INDEX idx_activity_logs_action ON public.activity_logs(action);
-CREATE INDEX idx_activity_logs_date ON public.activity_logs(created_at);
+
+CREATE INDEX idx_activity_logs_action ON public.activity_logs(action);-- ایندکس‌ها
+
+CREATE INDEX idx_activity_logs_date ON public.activity_logs(created_at);CREATE INDEX idx_drug_movements_drug ON public.drug_movements(drug_id);
+
+CREATE INDEX idx_drug_movements_warehouse ON public.drug_movements(warehouse_id);
+
+-- =====================================================CREATE INDEX idx_drug_movements_type ON public.drug_movements(movement_type);
+
+-- ویوها برای گزارش‌گیریCREATE INDEX idx_drug_movements_date ON public.drug_movements(created_at);
 
 -- =====================================================
--- ویوها برای گزارش‌گیری
+
 -- =====================================================
 
--- ویو موجودی کامل
-CREATE VIEW public.inventory_view AS
-SELECT 
-    wi.id,
-    d.id as drug_id,
-    d.name as drug_name,
-    d.generic_name,
-    d.form,
-    d.dosage,
-    d.manufacturer,
+-- ویو موجودی کامل-- جدول تنظیمات سیستم
+
+CREATE VIEW public.inventory_view AS-- =====================================================
+
+SELECT CREATE TABLE public.system_settings (
+
+    wi.id,    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+
+    d.id as drug_id,    setting_key VARCHAR(100) UNIQUE NOT NULL,
+
+    d.name as drug_name,    setting_value TEXT,
+
+    d.generic_name,    description TEXT,
+
+    d.form,    updated_by UUID REFERENCES public.users(id),
+
+    d.dosage,    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+
+    d.manufacturer,);
+
     dc.name as category_name,
-    w.id as warehouse_id,
-    w.name as warehouse_name,
-    wi.batch_number,
-    wi.quantity,
-    wi.unit_cost,
-    wi.manufacture_date,
-    wi.expire_date,
-    d.min_stock_level,
-    d.max_stock_level,
-    CASE 
-        WHEN wi.expire_date <= CURRENT_DATE THEN 'expired'
-        WHEN wi.expire_date <= CURRENT_DATE + INTERVAL '90 days' THEN 'expiring'
-        ELSE 'valid'
-    END as expiry_status,
-    wi.created_at,
+
+    w.id as warehouse_id,-- =====================================================
+
+    w.name as warehouse_name,-- جدول گزارش فعالیت‌ها
+
+    wi.batch_number,-- =====================================================
+
+    wi.quantity,CREATE TABLE public.activity_logs (
+
+    wi.unit_cost,    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+
+    wi.manufacture_date,    user_id UUID REFERENCES public.users(id),
+
+    wi.expire_date,    action VARCHAR(100) NOT NULL,
+
+    d.min_stock_level,    table_name VARCHAR(50),
+
+    d.max_stock_level,    record_id UUID,
+
+    CASE     old_data JSONB,
+
+        WHEN wi.expire_date <= CURRENT_DATE THEN 'expired'    new_data JSONB,
+
+        WHEN wi.expire_date <= CURRENT_DATE + INTERVAL '90 days' THEN 'expiring'    ip_address INET,
+
+        ELSE 'valid'    user_agent TEXT,
+
+    END as expiry_status,    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+
+    wi.created_at,);
+
     wi.last_updated
-FROM public.warehouse_inventory wi
-JOIN public.drugs d ON wi.drug_id = d.id
-JOIN public.warehouses w ON wi.warehouse_id = w.id
-LEFT JOIN public.drug_categories dc ON d.category_id = dc.id
+
+FROM public.warehouse_inventory wi-- ایندکس‌ها
+
+JOIN public.drugs d ON wi.drug_id = d.idCREATE INDEX idx_activity_logs_user ON public.activity_logs(user_id);
+
+JOIN public.warehouses w ON wi.warehouse_id = w.idCREATE INDEX idx_activity_logs_action ON public.activity_logs(action);
+
+LEFT JOIN public.drug_categories dc ON d.category_id = dc.idCREATE INDEX idx_activity_logs_date ON public.activity_logs(created_at);
+
 WHERE d.active = true AND w.active = true;
 
--- ویو حرکات کامل
-CREATE VIEW public.movements_view AS
+-- =====================================================
+
+-- ویو حرکات کامل-- ویوها برای گزارش‌گیری
+
+CREATE VIEW public.movements_view AS-- =====================================================
+
 SELECT 
-    dm.id,
-    d.name as drug_name,
-    d.generic_name,
-    w.name as warehouse_name,
+
+    dm.id,-- ویو موجودی کامل
+
+    d.name as drug_name,CREATE VIEW public.inventory_view AS
+
+    d.generic_name,SELECT 
+
+    w.name as warehouse_name,    wi.id,
+
+    dm.movement_type,    d.id as drug_id,
+
+    dm.quantity,    d.name as drug_name,
+
+    dm.unit_cost,    d.generic_name,
+
+    dm.batch_number,    d.form,
+
+    dm.expire_date,    d.dosage,
+
+    fw.name as from_warehouse_name,    d.manufacturer,
+
+    tw.name as to_warehouse_name,    dc.name as category_name,
+
+    u.full_name as user_name,    w.id as warehouse_id,
+
+    dm.notes,    w.name as warehouse_name,
+
+    dm.created_at    wi.batch_number,
+
+FROM public.drug_movements dm    wi.quantity,
+
+JOIN public.drugs d ON dm.drug_id = d.id    wi.unit_cost,
+
+JOIN public.warehouses w ON dm.warehouse_id = w.id    wi.manufacture_date,
+
+LEFT JOIN public.warehouses fw ON dm.from_warehouse_id = fw.id    wi.expire_date,
+
+LEFT JOIN public.warehouses tw ON dm.to_warehouse_id = tw.id    d.min_stock_level,
+
+LEFT JOIN public.users u ON dm.user_id = u.id    d.max_stock_level,
+
+ORDER BY dm.created_at DESC;    CASE 
+
+        WHEN wi.expire_date <= CURRENT_DATE THEN 'expired'
+
+-- =====================================================        WHEN wi.expire_date <= CURRENT_DATE + INTERVAL '90 days' THEN 'expiring'
+
+-- تریگرها برای بهروزرسانی خودکار        ELSE 'valid'
+
+-- =====================================================    END as expiry_status,
+
+    wi.created_at,
+
+-- تریگر برای بهروزرسانی updated_at    wi.last_updated
+
+CREATE OR REPLACE FUNCTION update_updated_at_column()FROM public.warehouse_inventory wi
+
+RETURNS TRIGGER AS $$JOIN public.drugs d ON wi.drug_id = d.id
+
+BEGINJOIN public.warehouses w ON wi.warehouse_id = w.id
+
+    NEW.updated_at = timezone('utc'::text, now());LEFT JOIN public.drug_categories dc ON d.category_id = dc.id
+
+    RETURN NEW;WHERE d.active = true AND w.active = true;
+
+END;
+
+$$ language 'plpgsql';-- ویو حرکات کامل
+
+CREATE VIEW public.movements_view AS
+
+-- اعمال تریگر به جداولSELECT 
+
+CREATE TRIGGER update_drug_categories_updated_at BEFORE UPDATE ON public.drug_categories FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();    dm.id,
+
+CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();    d.name as drug_name,
+
+CREATE TRIGGER update_warehouses_updated_at BEFORE UPDATE ON public.warehouses FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();    d.generic_name,
+
+CREATE TRIGGER update_drugs_updated_at BEFORE UPDATE ON public.drugs FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();    w.name as warehouse_name,
+
     dm.movement_type,
-    dm.quantity,
-    dm.unit_cost,
-    dm.batch_number,
-    dm.expire_date,
-    fw.name as from_warehouse_name,
-    tw.name as to_warehouse_name,
-    u.full_name as user_name,
-    dm.notes,
+
+-- تریگر برای بهروزرسانی موجودی    dm.quantity,
+
+CREATE OR REPLACE FUNCTION update_inventory_timestamp()    dm.unit_cost,
+
+RETURNS TRIGGER AS $$    dm.batch_number,
+
+BEGIN    dm.expire_date,
+
+    NEW.last_updated = timezone('utc'::text, now());    fw.name as from_warehouse_name,
+
+    RETURN NEW;    tw.name as to_warehouse_name,
+
+END;    u.full_name as user_name,
+
+$$ language 'plpgsql';    dm.notes,
+
     dm.created_at
-FROM public.drug_movements dm
+
+CREATE TRIGGER update_warehouse_inventory_timestamp BEFORE UPDATE ON public.warehouse_inventory FOR EACH ROW EXECUTE FUNCTION update_inventory_timestamp();FROM public.drug_movements dm
+
 JOIN public.drugs d ON dm.drug_id = d.id
-JOIN public.warehouses w ON dm.warehouse_id = w.id
-LEFT JOIN public.warehouses fw ON dm.from_warehouse_id = fw.id
-LEFT JOIN public.warehouses tw ON dm.to_warehouse_id = tw.id
+
+-- =====================================================JOIN public.warehouses w ON dm.warehouse_id = w.id
+
+-- داده‌های اولیه ضروریLEFT JOIN public.warehouses fw ON dm.from_warehouse_id = fw.id
+
+-- =====================================================LEFT JOIN public.warehouses tw ON dm.to_warehouse_id = tw.id
+
 LEFT JOIN public.users u ON dm.user_id = u.id
-ORDER BY dm.created_at DESC;
 
--- =====================================================
--- تریگرها برای بهروزرسانی خودکار
--- =====================================================
+-- دسته‌بندی‌های پایهORDER BY dm.created_at DESC;
 
--- تریگر برای بهروزرسانی updated_at
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = timezone('utc'::text, now());
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
-
--- اعمال تریگر به جداول
-CREATE TRIGGER update_drug_categories_updated_at BEFORE UPDATE ON public.drug_categories FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_warehouses_updated_at BEFORE UPDATE ON public.warehouses FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_drugs_updated_at BEFORE UPDATE ON public.drugs FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
--- تریگر برای بهروزرسانی موجودی
-CREATE OR REPLACE FUNCTION update_inventory_timestamp()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.last_updated = timezone('utc'::text, now());
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
-
-CREATE TRIGGER update_warehouse_inventory_timestamp BEFORE UPDATE ON public.warehouse_inventory FOR EACH ROW EXECUTE FUNCTION update_inventory_timestamp();
-
--- =====================================================
--- داده‌های اولیه ضروری
--- =====================================================
-
--- دسته‌بندی‌های پایه
 INSERT INTO public.drug_categories (name, description) VALUES
-('عمومی', 'داروهای عمومی'),
-('آنتی‌بیوتیک', 'داروهای ضد عفونی'),
-('ضد درد', 'داروهای تسکین درد'),
-('قلبی و عروقی', 'داروهای مربوط به قلب و عروق'),
-('گوارشی', 'داروهای مربوط به دستگاه گوارش'),
-('تنفسی', 'داروهای مربوط به دستگاه تنفسی'),
-('هورمونی', 'داروهای هورمونی'),
-('ویتامین و مکمل', 'ویتامین‌ها و مکمل‌های غذایی');
 
--- کاربر سوپر ادمین پیش‌فرض
-INSERT INTO public.users (username, password, full_name, role) VALUES
-('superadmin', 'A25893Aa', 'مدیر کل سیستم', 'superadmin'),
+('عمومی', 'داروهای عمومی'),-- =====================================================
+
+('آنتی‌بیوتیک', 'داروهای ضد عفونی'),-- تریگرها برای بهروزرسانی خودکار
+
+('ضد درد', 'داروهای تسکین درد'),-- =====================================================
+
+('قلبی و عروقی', 'داروهای مربوط به قلب و عروق'),
+
+('گوارشی', 'داروهای مربوط به دستگاه گوارش'),-- تریگر برای بهروزرسانی updated_at
+
+('تنفسی', 'داروهای مربوط به دستگاه تنفسی'),CREATE OR REPLACE FUNCTION update_updated_at_column()
+
+('هورمونی', 'داروهای هورمونی'),RETURNS TRIGGER AS $$
+
+('ویتامین و مکمل', 'ویتامین‌ها و مکمل‌های غذایی');BEGIN
+
+    NEW.updated_at = timezone('utc'::text, now());
+
+-- کاربر سوپر ادمین پیش‌فرض    RETURN NEW;
+
+INSERT INTO public.users (username, password, full_name, role) VALUESEND;
+
+('superadmin', 'A25893Aa', 'مدیر کل سیستم', 'superadmin'),$$ language 'plpgsql';
+
 ('admin', 'admin123', 'مدیر سیستم', 'admin');
 
--- انبار پیش‌فرض
-INSERT INTO public.warehouses (name, description, address) VALUES
-('انبار مرکزی', 'انبار اصلی داروخانه', 'آدرس انبار مرکزی'),
-('انبار فرعی', 'انبار کمکی', 'آدرس انبار فرعی');
+-- اعمال تریگر به جداول
 
+-- انبار پیش‌فرضCREATE TRIGGER update_drug_categories_updated_at BEFORE UPDATE ON public.drug_categories FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+INSERT INTO public.warehouses (name, description, address) VALUESCREATE TRIGGER update_users_updated_at BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+('انبار مرکزی', 'انبار اصلی داروخانه', 'آدرس انبار مرکزی'),CREATE TRIGGER update_warehouses_updated_at BEFORE UPDATE ON public.warehouses FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+('انبار فرعی', 'انبار کمکی', 'آدرس انبار فرعی');CREATE TRIGGER update_drugs_updated_at BEFORE UPDATE ON public.drugs FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+
+
+-- تنظیمات پیش‌فرض سیستم-- تریگر برای بهروزرسانی موجودی
+
+INSERT INTO public.system_settings (setting_key, setting_value, description) VALUESCREATE OR REPLACE FUNCTION update_inventory_timestamp()
+
+('company_name', 'سیستم مدیریت موجودی داروخانه', 'نام شرکت'),RETURNS TRIGGER AS $$
+
+('company_address', 'آدرس شرکت', 'آدرس شرکت'),BEGIN
+
+('company_phone', '021-12345678', 'تلفن شرکت'),    NEW.last_updated = timezone('utc'::text, now());
+
+('low_stock_threshold', '10', 'حد آستانه کمبود موجودی'),    RETURN NEW;
+
+('expiry_alert_days', '90', 'تعداد روز هشدار انقضا');END;
+
+$$ language 'plpgsql';
+
+-- =====================================================
+
+-- RLS (Row Level Security) PoliciesCREATE TRIGGER update_warehouse_inventory_timestamp BEFORE UPDATE ON public.warehouse_inventory FOR EACH ROW EXECUTE FUNCTION update_inventory_timestamp();
+
+-- =====================================================
+
+-- =====================================================
+
+-- فعال‌سازی RLS برای جداول حساس-- داده‌های اولیه ضروری
+
+ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;-- =====================================================
+
+ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY;
+
+-- دسته‌بندی‌های پایه
+
+-- Policy برای دسترسی کاربران به اطلاعات خودINSERT INTO public.drug_categories (name, description) VALUES
+
+CREATE POLICY "Users can view their own data" ON public.users('عمومی', 'داروهای عمومی'),
+
+    FOR SELECT USING (auth.uid()::text = id::text OR ('آنتی‌بیوتیک', 'داروهای ضد عفونی'),
+
+                     EXISTS (SELECT 1 FROM public.users WHERE id::text = auth.uid()::text AND role IN ('superadmin', 'admin')));('ضد درد', 'داروهای تسکین درد'),
+
+('قلبی و عروقی', 'داروهای مربوط به قلب و عروق'),
+
+-- Policy برای دسترسی ادمین‌ها به تمام داده‌ها('گوارشی', 'داروهای مربوط به دستگاه گوارش'),
+
+CREATE POLICY "Admins can manage all users" ON public.users('تنفسی', 'داروهای مربوط به دستگاه تنفسی'),
+
+    FOR ALL USING (EXISTS (SELECT 1 FROM public.users WHERE id::text = auth.uid()::text AND role IN ('superadmin', 'admin')));('هورمونی', 'داروهای هورمونی'),
+
+('ویتامین و مکمل', 'ویتامین‌ها و مکمل‌های غذایی');
+
+-- Policy برای لاگ‌ها
+
+CREATE POLICY "Users can view relevant logs" ON public.activity_logs-- کاربر سوپر ادمین پیش‌فرض
+
+    FOR SELECT USING (user_id::text = auth.uid()::text OR INSERT INTO public.users (username, password, full_name, role) VALUES
+
+                     EXISTS (SELECT 1 FROM public.users WHERE id::text = auth.uid()::text AND role IN ('superadmin', 'admin')));('superadmin', 'A25893Aa', 'مدیر کل سیستم', 'superadmin'),
+
+('admin', 'admin123', 'مدیر سیستم', 'admin');
+
+-- =====================================================
+
+-- اتمام Schema-- انبار پیش‌فرض
+
+-- =====================================================INSERT INTO public.warehouses (name, description, address) VALUES
+
+('انبار مرکزی', 'انبار اصلی داروخانه', 'آدرس انبار مرکزی'),
+
+-- تایید نهایی('انبار فرعی', 'انبار کمکی', 'آدرس انبار فرعی');
+
+SELECT 'Database schema created successfully!' as result;
 -- تنظیمات پیش‌فرض سیستم
 INSERT INTO public.system_settings (setting_key, setting_value, description) VALUES
 ('company_name', 'سیستم مدیریت موجودی داروخانه', 'نام شرکت'),
