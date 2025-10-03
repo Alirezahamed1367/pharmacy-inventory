@@ -357,7 +357,7 @@ export const getWarehouses = async () => {
   try {
     const { data, error } = await supabase
       .from('warehouses')
-      .select('id,name,location,created_at')
+  .select('id,name,location,manager_user_id,created_at')
       .order('name')
 
     return { data: data || [], error }
@@ -375,7 +375,7 @@ export const getAllWarehouses = async () => {
   try {
     const { data, error } = await supabase
       .from('warehouses')
-      .select('id,name,location,created_at')
+  .select('id,name,location,manager_user_id,created_at')
       .order('name')
 
     return { data: data || [], error }
@@ -394,12 +394,13 @@ export const addWarehouse = async (warehouseData) => {
     // فقط ستون‌های مجاز
     const payload = {
       name: warehouseData.name?.trim(),
-      location: warehouseData.location?.trim() || null
+      location: warehouseData.location?.trim() || null,
+      manager_user_id: warehouseData.manager_user_id || null
     }
     const { data: inserted, error } = await supabase
       .from('warehouses')
       .insert([ payload ])
-      .select('id,name,location,created_at')
+  .select('id,name,location,manager_user_id,created_at')
 
     if (error) {
       return { error }
@@ -421,14 +422,14 @@ export const updateWarehouse = async (id, warehouseData) => {
     const payload = {
       name: warehouseData.name?.trim(),
       location: warehouseData.location?.trim() || null,
+      manager_user_id: warehouseData.manager_user_id || null,
       updated_at: new Date().toISOString()
     }
     const { data, error } = await supabase
       .from('warehouses')
       .update(payload)
       .eq('id', id)
-      .select('id,name,location,created_at,updated_at')
-
+      .select('id,name,location,manager_user_id,created_at,updated_at')
     if (error) {
       return { error }
     }
@@ -436,6 +437,34 @@ export const updateWarehouse = async (id, warehouseData) => {
     return { data: data[0], error: null }
   } catch (error) {
     return { error: { message: 'خطا در ویرایش انبار: ' + error.message } }
+  }
+}
+
+// ======================= LOT / EXPIRY HELPERS (Phase 1 placeholders) =======================
+// Fetch lots for a drug in a warehouse (after inventory.lot_id adoption)
+export const getLotsByWarehouseDrug = async (warehouse_id, drug_id) => {
+  if (!supabase) return { data: [], error: null }
+  try {
+    const { data, error } = await supabase
+      .from('inventory')
+      .select('id, quantity, lot:drug_lots(id, lot_number, expire_date, drug_id)')
+      .eq('warehouse_id', warehouse_id)
+      .eq('lot.drug_id', drug_id)
+    return { data: data || [], error }
+  } catch (e) {
+    return { data: [], error: { message: 'خطا در دریافت لات‌ها: ' + e.message } }
+  }
+}
+
+export const getLotsExpiringSummary = async () => {
+  if (!supabase) return { data: [], error: null }
+  try {
+    const { data, error } = await supabase
+      .from('drug_lots')
+      .select('id, drug_id, expire_date')
+    return { data: data || [], error }
+  } catch (e) {
+    return { data: [], error: { message: 'خطا در خلاصه لات‌ها: ' + e.message } }
   }
 }
 

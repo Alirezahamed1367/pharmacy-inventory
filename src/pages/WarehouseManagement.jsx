@@ -37,25 +37,27 @@ import {
   SwapHoriz as TransferIcon,
 } from '@mui/icons-material'
 // TransferDialog حذف شده؛ استفاده از صفحه مستقل Transfers
-// ManagerSelect حذف شد چون ستون مرتبط در جدول وجود ندارد
+import { ManagerSelect } from '../components/DropdownSelects'
 
 import { useEffect } from 'react'
 import { 
   getAllWarehouses, 
   addWarehouse, 
   updateWarehouse, 
-  deleteWarehouse 
+  deleteWarehouse,
+  getWarehouseManagers 
 } from '../services/supabase'
 
 export default function WarehouseManagement() {
   const [warehouses, setWarehouses] = useState([])
-  // managers حذف شد
+  const [managers, setManagers] = useState([])
   const [openDialog, setOpenDialog] = useState(false)
   // انتقال‌ها اکنون در صفحه جداگانه مدیریت می‌شوند
   const [selectedWarehouse, setSelectedWarehouse] = useState(null)
   const [formData, setFormData] = useState({
     name: '',
     location: '',
+    manager_user_id: ''
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -73,7 +75,10 @@ export default function WarehouseManagement() {
       if (warehousesResult.error) throw new Error(warehousesResult.error.message)
       setWarehouses(warehousesResult.data || [])
 
-  // ستون یا نقش مدیر فعلاً حذف شده است
+  // مدیران انبار
+  const managersResult = await getWarehouseManagers()
+  if (managersResult.error) throw new Error(managersResult.error.message)
+  setManagers(managersResult.data || [])
     } catch (err) {
       setError(err.message || 'خطا در دریافت داده‌ها')
     } finally {
@@ -89,12 +94,14 @@ export default function WarehouseManagement() {
       setFormData({
         name: warehouse.name || '',
         location: warehouse.location || '',
+        manager_user_id: warehouse.manager_user_id || ''
       })
     } else {
       setSelectedWarehouse(null)
       setFormData({
         name: '',
         location: '',
+        manager_user_id: ''
       })
     }
     setOpenDialog(true)
@@ -111,10 +118,10 @@ export default function WarehouseManagement() {
       let result
       if (selectedWarehouse) {
         // ویرایش
-        result = await updateWarehouse(selectedWarehouse.id, { name: formData.name, location: formData.location })
+        result = await updateWarehouse(selectedWarehouse.id, { name: formData.name, location: formData.location, manager_user_id: formData.manager_user_id || null })
       } else {
         // افزودن
-        result = await addWarehouse({ name: formData.name, location: formData.location })
+        result = await addWarehouse({ name: formData.name, location: formData.location, manager_user_id: formData.manager_user_id || null })
       }
       
       if (result.error) throw new Error(result.error.message)
@@ -193,7 +200,11 @@ export default function WarehouseManagement() {
                         <Typography variant="h6" fontWeight="bold">
                           {warehouse.name}
                         </Typography>
-                        {/* ستون مسئول حذف شده */}
+                        {warehouse.manager_user_id && (
+                          <Typography variant="caption" color="text.secondary">
+                            مدیر: {managers.find(m=>m.id===warehouse.manager_user_id)?.full_name || '---'}
+                          </Typography>
+                        )}
                       </Box>
                     </Box>
                     <Box>
@@ -246,7 +257,16 @@ export default function WarehouseManagement() {
                 required
               />
             </Grid>
-            {/* فیلد مسئول حذف شد */}
+            <Grid item xs={12} md={6}>
+              <ManagerSelect
+                value={managers.find(m=>m.id===formData.manager_user_id) || null}
+                managers={managers}
+                onChange={(newVal)=> setFormData(f=>({...f, manager_user_id: newVal ? newVal.id : ''}))}
+                label="مسئول انبار"
+                required={false}
+                size="medium"
+              />
+            </Grid>
             {/* فیلد توضیحات حذف شد */}
             <Grid item xs={12}>
               <TextField
