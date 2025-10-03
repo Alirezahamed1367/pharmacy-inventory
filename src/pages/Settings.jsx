@@ -101,6 +101,7 @@ const Settings = () => {
     contact: '',
     contactPhone: '',
     specialties: '',
+    isActive: true
   })
 
   // دریافت داده‌های کاربران و تامین‌کنندگان از Supabase
@@ -120,21 +121,18 @@ const Settings = () => {
       if (usersError) throw usersError
       setUsers(usersData || [])
 
-      // تامین‌کنندگان (از جدول system_settings یا suppliers)
+      // تامین‌کنندگان از جدول واقعی suppliers
       const { data: suppliersData, error: suppliersError } = await supabase
-        .from('system_settings')
+        .from('suppliers')
         .select('*')
-        .eq('setting_key', 'suppliers')
+        .order('created_at', { ascending: false })
       if (suppliersError) throw suppliersError
-      let suppliersList = []
-      if (suppliersData && suppliersData.length > 0) {
-        try {
-          suppliersList = JSON.parse(suppliersData[0].setting_value)
-        } catch {
-          // ignore JSON parse error for suppliers settings
-        }
-      }
-      setSuppliers(suppliersList)
+      // specialties در DB به صورت متن کاما جدا ذخیره شده
+      const normalized = (suppliersData || []).map(s => ({
+        ...s,
+        specialties: s.specialties ? s.specialties.split(',').map(x => x.trim()).filter(Boolean) : []
+      }))
+      setSuppliers(normalized)
     } catch (err) {
       setError(err.message || 'خطا در دریافت داده‌ها')
     } finally {
@@ -214,14 +212,15 @@ const Settings = () => {
     if (supplier) {
       setSelectedSupplier(supplier)
       setSupplierFormData({
-        name: supplier.name,
-        code: supplier.code,
-        phone: supplier.phone,
-        email: supplier.email,
-        address: supplier.address,
-        contact: supplier.contact,
-        contactPhone: supplier.contactPhone,
+        name: supplier.name || '',
+        code: supplier.code || '',
+        phone: supplier.phone || '',
+        email: supplier.email || '',
+        address: supplier.address || '',
+        contact: supplier.contact_person || '',
+        contactPhone: supplier.contact_phone || '',
         specialties: supplier.specialties?.join(', ') || '',
+        isActive: supplier.is_active ?? true
       })
     } else {
       setSelectedSupplier(null)
@@ -234,6 +233,7 @@ const Settings = () => {
         contact: '',
         contactPhone: '',
         specialties: '',
+        isActive: true
       })
     }
     setOpenSupplierDialog(true)
@@ -247,32 +247,27 @@ const Settings = () => {
   // افزودن یا ویرایش تامین‌کننده (در system_settings)
   const handleSaveSupplier = async () => {
     try {
-      let updatedSuppliers = [...suppliers]
-      const supplierData = {
-        ...supplierFormData,
-        specialties: supplierFormData.specialties.split(',').map(s => s.trim()).filter(s => s),
-        rating: 0,
-        isActive: true
+      const specialtiesArr = supplierFormData.specialties.split(',').map(s => s.trim()).filter(Boolean)
+      const payload = {
+        name: supplierFormData.name,
+        code: supplierFormData.code || null,
+        phone: supplierFormData.phone || null,
+        email: supplierFormData.email || null,
+        address: supplierFormData.address || null,
+        contact_person: supplierFormData.contact || null,
+        contact_phone: supplierFormData.contactPhone || null,
+        specialties: specialtiesArr.join(', '),
+        is_active: supplierFormData.isActive,
       }
       if (selectedSupplier) {
-        // ویرایش
-        updatedSuppliers = updatedSuppliers.map(supplier => 
-          supplier.id === selectedSupplier.id 
-            ? { ...supplier, ...supplierData }
-            : supplier
-        )
+        const { error } = await supabase.from('suppliers').update(payload).eq('id', selectedSupplier.id)
+        if (error) throw error
       } else {
-        // افزودن
-        updatedSuppliers.push({ ...supplierData, id: Date.now() })
+        const { error } = await supabase.from('suppliers').insert([{ ...payload }])
+        if (error) throw error
       }
-      // ذخیره در system_settings
-      const { error } = await supabase
-        .from('system_settings')
-        .update({ setting_value: JSON.stringify(updatedSuppliers) })
-        .eq('setting_key', 'suppliers')
-      if (error) throw error
-      fetchAll()
-      handleCloseSupplierDialog()
+      fetchAll();
+      handleCloseSupplierDialog();
     } catch (err) {
       setError(err.message || 'خطا در ذخیره تامین‌کننده')
     }
@@ -282,11 +277,7 @@ const Settings = () => {
   const handleDeleteSupplier = async (supplierId) => {
     if (!window.confirm('آیا از حذف این تامین‌کننده مطمئن هستید؟')) return
     try {
-      const updatedSuppliers = suppliers.filter(supplier => supplier.id !== supplierId)
-      const { error } = await supabase
-        .from('system_settings')
-        .update({ setting_value: JSON.stringify(updatedSuppliers) })
-        .eq('setting_key', 'suppliers')
+      const { error } = await supabase.from('suppliers').delete().eq('id', supplierId)
       if (error) throw error
       fetchAll()
     } catch (err) {
@@ -670,9 +661,9 @@ const Settings = () => {
                           <TableCell>{supplier.phone}</TableCell>
                           <TableCell>
                             <Box>
-                              <Typography variant="body2">{supplier.contact}</Typography>
+                              <Typography variant="body2">{supplier.contact_person}</Typography>
                               <Typography variant="caption" color="text.secondary">
-                                {supplier.contactPhone}
+                                {supplier.contact_phone}
                               </Typography>
                             </Box>
                           </TableCell>
@@ -690,8 +681,8 @@ const Settings = () => {
                           </TableCell>
                           <TableCell>
                             <Chip
-                              label={supplier.isActive ? 'فعال' : 'غیرفعال'}
-                              color={supplier.isActive ? 'success' : 'default'}
+                              label={supplier.is_active ? 'فعال' : 'غیرفعال'}
+                              color={supplier.is_active ? 'success' : 'default'}
                               size="small"
                             />
                           </TableCell>
