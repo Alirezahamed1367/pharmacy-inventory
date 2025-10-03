@@ -36,6 +36,7 @@ import {
 } from '@mui/icons-material'
 import { getInventoryDetailed, getWarehouses, getActiveDrugs, isBackendAvailable } from '../services/supabase'
 import Skeleton from '@mui/material/Skeleton'
+import ExpiryChip from '../components/ExpiryChip'
 
 const Reports = () => {
   const [tabValue, setTabValue] = useState(0)
@@ -279,6 +280,7 @@ const Reports = () => {
                   <TableCell>موجودی</TableCell>
                   <TableCell>تاریخ انقضا</TableCell>
                   <TableCell>وضعیت</TableCell>
+                  <TableCell>انقضا</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -290,13 +292,8 @@ const Reports = () => {
                     <TableCell>
                       {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('fa-IR') : 'نامشخص'}
                     </TableCell>
-                    <TableCell>
-                      <Chip 
-                        label="فعال" 
-                        color="success" 
-                        size="small" 
-                      />
-                    </TableCell>
+                    <TableCell><ExpiryChip date={item.expiry_date} /></TableCell>
+                    <TableCell>{item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('fa-IR'): '—'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -321,6 +318,7 @@ const Reports = () => {
                   <TableCell>موجودی</TableCell>
                   <TableCell>تاریخ انقضا</TableCell>
                   <TableCell>روزهای منقضی</TableCell>
+                  <TableCell>وضعیت</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -330,9 +328,8 @@ const Reports = () => {
                     <TableCell>{item.warehouse_name}</TableCell>
                     <TableCell>{item.quantity}</TableCell>
                     <TableCell>{item.expire_date ? new Date(item.expire_date).toLocaleDateString('fa-IR') : 'نامشخص'}</TableCell>
-                    <TableCell>
-                      <Chip label={`${Math.abs(item.diffDays)}-`} color="error" size="small" />
-                    </TableCell>
+                    <TableCell><Chip label={`${Math.abs(item.diffDays)}-`} color="error" size="small" /></TableCell>
+                    <TableCell><ExpiryChip date={item.expire_date} /></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -348,6 +345,7 @@ const Reports = () => {
                   <TableCell>موجودی</TableCell>
                   <TableCell>تاریخ انقضا</TableCell>
                   <TableCell>روزهای باقی‌مانده</TableCell>
+                  <TableCell>وضعیت</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -357,9 +355,8 @@ const Reports = () => {
                     <TableCell>{item.warehouse_name}</TableCell>
                     <TableCell>{item.quantity}</TableCell>
                     <TableCell>{item.expire_date ? new Date(item.expire_date).toLocaleDateString('fa-IR') : 'نامشخص'}</TableCell>
-                    <TableCell>
-                      <Chip label={`${item.diffDays} روز`} color="error" size="small" />
-                    </TableCell>
+                    <TableCell><Chip label={`${item.diffDays} روز`} color="error" size="small" /></TableCell>
+                    <TableCell><ExpiryChip date={item.expire_date} /></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -375,6 +372,7 @@ const Reports = () => {
                   <TableCell>موجودی</TableCell>
                   <TableCell>تاریخ انقضا</TableCell>
                   <TableCell>روزهای باقی‌مانده</TableCell>
+                  <TableCell>وضعیت</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -384,9 +382,8 @@ const Reports = () => {
                     <TableCell>{item.warehouse_name}</TableCell>
                     <TableCell>{item.quantity}</TableCell>
                     <TableCell>{item.expire_date ? new Date(item.expire_date).toLocaleDateString('fa-IR') : 'نامشخص'}</TableCell>
-                    <TableCell>
-                      <Chip label={`${item.diffDays} روز`} color="warning" size="small" />
-                    </TableCell>
+                    <TableCell><Chip label={`${item.diffDays} روز`} color="warning" size="small" /></TableCell>
+                    <TableCell><ExpiryChip date={item.expire_date} /></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -424,6 +421,7 @@ const Reports = () => {
                   <TableCell>موجودی</TableCell>
                   <TableCell>تاریخ انقضا</TableCell>
                   <TableCell>وضعیت</TableCell>
+                  <TableCell>انقضا</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -434,13 +432,8 @@ const Reports = () => {
                     <TableCell>
                       {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('fa-IR') : 'نامشخص'}
                     </TableCell>
-                    <TableCell>
-                      <Chip 
-                        label="فعال" 
-                        color="success" 
-                        size="small" 
-                      />
-                    </TableCell>
+                    <TableCell><ExpiryChip date={item.expiry_date} /></TableCell>
+                    <TableCell>{item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('fa-IR'): '—'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
