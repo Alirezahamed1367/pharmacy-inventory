@@ -87,8 +87,7 @@ const Settings = () => {
   const [tabValue, setTabValue] = useState(0)
   const [userFormData, setUserFormData] = useState({
     username: '',
-    fullName: '',
-    email: '',
+    full_name: '',
     role: 'manager',
     password: '',
   })
@@ -145,8 +144,7 @@ const Settings = () => {
       setSelectedUser(user)
       setUserFormData({
         username: user.username,
-        fullName: user.fullName,
-        email: user.email,
+        full_name: user.full_name || '',
         role: user.role,
         password: '',
       })
@@ -154,8 +152,7 @@ const Settings = () => {
       setSelectedUser(null)
       setUserFormData({
         username: '',
-        fullName: '',
-        email: '',
+        full_name: '',
         role: 'manager',
         password: '',
       })
@@ -173,16 +170,26 @@ const Settings = () => {
     try {
       if (selectedUser) {
         // ویرایش
+        const payload = {
+          username: userFormData.username,
+          full_name: userFormData.full_name,
+          role: userFormData.role
+        }
         const { error } = await supabase
           .from('users')
-          .update({ ...userFormData })
+          .update(payload)
           .eq('id', selectedUser.id)
         if (error) throw error
       } else {
-        // افزودن
+        // افزودن (ایجاد hash رمز در backend ساده نشده؛ فعلا plain منع؛ بهتر: فراخوانی endpoint hashing)
         const { error } = await supabase
           .from('users')
-          .insert([{ ...userFormData, active: true }])
+          .insert([{ 
+            username: userFormData.username,
+            full_name: userFormData.full_name,
+            role: userFormData.role,
+            password_hash: userFormData.password ? userFormData.password : 'temp' 
+          }])
         if (error) throw error
       }
       fetchAll()
@@ -402,7 +409,7 @@ const Settings = () => {
                       primary={
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <Typography variant="subtitle1" fontWeight="bold">
-                            {user.fullName}
+                            {user.full_name}
                           </Typography>
                           <Chip
                             size="small"
@@ -417,9 +424,7 @@ const Settings = () => {
                           <Typography variant="caption" display="block">
                             نام کاربری: {user.username}
                           </Typography>
-                          <Typography variant="caption" display="block">
-                            آخرین ورود: {user.lastLogin || 'هرگز'}
-                          </Typography>
+                          {/* فیلد آخرین ورود در اسکیمای فعلی وجود ندارد */}
                         </Box>
                       }
                     />
@@ -747,7 +752,7 @@ const Settings = () => {
                         primary={
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Typography variant="subtitle1" fontWeight="bold">
-                              {user.fullName}
+                              {user.full_name}
                             </Typography>
                             <Chip
                               size="small"
@@ -757,7 +762,7 @@ const Settings = () => {
                             {user.active && <Chip size="small" label="فعال" color="success" variant="outlined" />}
                           </Box>
                         }
-                        secondary={`@${user.username} • آخرین ورود: ${user.lastLogin}`}
+                        secondary={`@${user.username}`}
                       />
                       <ListItemSecondaryAction>
                         <IconButton
@@ -1025,20 +1030,12 @@ const Settings = () => {
               <TextField
                 fullWidth
                 label="نام و نام خانوادگی"
-                value={userFormData.fullName}
-                onChange={(e) => setUserFormData({ ...userFormData, fullName: e.target.value })}
+                value={userFormData.full_name}
+                onChange={(e) => setUserFormData({ ...userFormData, full_name: e.target.value })}
                 required
               />
             </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="ایمیل"
-                type="email"
-                value={userFormData.email}
-                onChange={(e) => setUserFormData({ ...userFormData, email: e.target.value })}
-              />
-            </Grid>
+            {/* ایمیل در اسکیمای فعلی users وجود ندارد */}
             <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
