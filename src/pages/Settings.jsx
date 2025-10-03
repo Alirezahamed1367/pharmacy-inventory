@@ -181,14 +181,17 @@ const Settings = () => {
           .eq('id', selectedUser.id)
         if (error) throw error
       } else {
-        // افزودن (ایجاد hash رمز در backend ساده نشده؛ فعلا plain منع؛ بهتر: فراخوانی endpoint hashing)
+        if (!userFormData.password) throw new Error('رمز عبور الزامی است')
+        const bcrypt = await import('bcryptjs')
+        const hash = await bcrypt.hash(userFormData.password, 10)
         const { error } = await supabase
           .from('users')
           .insert([{ 
-            username: userFormData.username,
-            full_name: userFormData.full_name,
+            username: userFormData.username.trim(),
+            full_name: userFormData.full_name.trim(),
             role: userFormData.role,
-            password_hash: userFormData.password ? userFormData.password : 'temp' 
+            password_hash: hash,
+            is_active: true
           }])
         if (error) throw error
       }
@@ -416,9 +419,7 @@ const Settings = () => {
                             label={getRoleText(user.role)}
                             color={getRoleColor(user.role)}
                           />
-                          {user.active && <Chip size="small" label="فعال" color="success" variant="outlined" />}
-                            {user.is_active && <Chip size="small" label="فعال" color="success" variant="outlined" />}
-                            {user.is_active && <Chip size="small" label="فعال" color="success" variant="outlined" />}
+                          {user.is_active && <Chip size="small" label="فعال" color="success" variant="outlined" />}
                         </Box>
                       }
                       secondary={
