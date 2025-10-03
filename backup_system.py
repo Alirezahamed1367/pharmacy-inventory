@@ -9,8 +9,10 @@ import schedule
 import time
 import smtplib
 import zipfile
+import tarfile
 import subprocess
 import psycopg2
+import hashlib
 from datetime import datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -30,26 +32,32 @@ class PharmacyBackupSystem:
             'password': os.getenv('SUPABASE_PASSWORD', '')
         }
         
-        # تنظیمات ایمیل
+        # نسخه سیستم
+        self.system_version = '2.0'
+
+        # تنظیمات ایمیل (قابل غیرفعال‌سازی با ENV)
         self.email_config = {
             'smtp_server': 'smtp.gmail.com',
             'smtp_port': 587,
             'email': 'your-backup-email@gmail.com',  # ایمیل فرستنده
             'password': 'your-app-password',  # App Password گوگل
-            'recipient': 'alireza.h67@gmail.com'
+            'recipient': 'alireza.h67@gmail.com',
+            'enabled': os.getenv('BACKUP_EMAIL_ENABLED', 'true').lower() == 'true'
         }
         
-        # تنظیمات GitHub
+        # تنظیمات GitHub (قابل غیرفعال‌سازی)
         self.github_config = {
             'token': os.getenv('GITHUB_TOKEN', ''),
             'repo': 'Alirezahamed1367/pharmacy-inventory',
-            'branch': 'backups'
+            'branch': 'backups',
+            'enabled': os.getenv('BACKUP_GITHUB_ENABLED', 'true').lower() == 'true'
         }
         
         # مسیرهای محلی
         self.local_backup_path = 'backups'
-        self.max_local_backups = 30  # حداکثر 30 فایل backup محلی
-        
+        self.max_local_backups = int(os.getenv('BACKUP_MAX_LOCAL', '30'))  # حداکثر فایل‌های محلی
+        self.create_targz = os.getenv('BACKUP_TAR_GZ', 'false').lower() == 'true'
+
         # ایجاد پوشه backup اگر وجود ندارد
         os.makedirs(self.local_backup_path, exist_ok=True)
 
@@ -91,48 +99,72 @@ class PharmacyBackupSystem:
             print(f"❌ خطا در backup: {str(e)}")
             return None
 
+    def snapshot_table_list(self):
+        """دریافت لیست جداول برای ثبت در متادیتا"""
+        try:
+            conn = psycopg2.connect(**self.db_config)
+            cur = conn.cursor()
+            cur.execute("""SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name;""")
+            tables = [r[0] for r in cur.fetchall()]
+            cur.close(); conn.close()
+            return tables
+        except Exception as e:
+            return [f'ERROR: {e}']
+
+    def sha256_file(self, path):
+        h = hashlib.sha256()
+        with open(path, 'rb') as f:
+            for chunk in iter(lambda: f.read(8192), b''):
+                h.update(chunk)
+        return h.hexdigest()
+
     def create_metadata_file(self, backup_path):
-        """ایجاد فایل اطلاعات backup"""
+        """ایجاد فایل اطلاعات backup همراه با هش، جدول‌ها و نسخه"""
         metadata = {
             'backup_date': datetime.now().isoformat(),
-            'database_info': {
+            'database': {
                 'host': self.db_config['host'],
-                'database': self.db_config['database']
+                'name': self.db_config['database']
             },
-            'system_info': {
+            'system': {
                 'created_by': 'علیرضا حامد',
-                'version': '1.0',
+                'version': self.system_version,
                 'description': 'Backup خودکار سیستم مدیریت انبار داروخانه'
             },
-            'file_info': {
-                'backup_file': os.path.basename(backup_path),
-                'size_mb': round(os.path.getsize(backup_path) / 1024 / 1024, 2)
-            }
+            'file': {
+                'name': os.path.basename(backup_path),
+                'size_mb': round(os.path.getsize(backup_path) / 1024 / 1024, 2),
+                'sha256': self.sha256_file(backup_path)
+            },
+            'tables': self.snapshot_table_list()
         }
-        
         metadata_path = backup_path.replace('.sql', '_metadata.json')
         with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, ensure_ascii=False, indent=2)
-        
         return metadata_path
 
     def compress_backup(self, backup_path, metadata_path):
-        """فشرده‌سازی فایل‌های backup"""
-        zip_path = backup_path.replace('.sql', '.zip')
-        
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            zipf.write(backup_path, os.path.basename(backup_path))
-            zipf.write(metadata_path, os.path.basename(metadata_path))
-        
-        # حذف فایل‌های اصلی
-        os.remove(backup_path)
-        os.remove(metadata_path)
-        
-        print(f"✅ فایل فشرده شد: {zip_path}")
-        return zip_path
+        """فشرده‌سازی فایل‌های backup (ZIP یا TAR.GZ)"""
+        base = backup_path.replace('.sql', '')
+        if self.create_targz:
+            archive_path = base + '.tar.gz'
+            with tarfile.open(archive_path, 'w:gz') as tar:
+                tar.add(backup_path, arcname=os.path.basename(backup_path))
+                tar.add(metadata_path, arcname=os.path.basename(metadata_path))
+        else:
+            archive_path = base + '.zip'
+            with zipfile.ZipFile(archive_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                zipf.write(backup_path, os.path.basename(backup_path))
+                zipf.write(metadata_path, os.path.basename(metadata_path))
+        os.remove(backup_path); os.remove(metadata_path)
+        print(f"✅ فایل فشرده شد: {archive_path}")
+        return archive_path
 
     def send_email_backup(self, zip_path):
         """ارسال backup به ایمیل"""
+        if not self.email_config.get('enabled', True):
+            print('📭 ارسال ایمیل غیرفعال است (BACKUP_EMAIL_ENABLED=false)')
+            return False
         try:
             msg = MIMEMultipart()
             msg['From'] = self.email_config['email']
@@ -193,6 +225,9 @@ Backup خودکار سیستم مدیریت انبار داروخانه با م�
 
     def upload_to_github(self, zip_path):
         """آپلود backup به GitHub"""
+        if not self.github_config.get('enabled', True):
+            print('🐙 آپلود GitHub غیرفعال است (BACKUP_GITHUB_ENABLED=false)')
+            return False
         try:
             if not self.github_config['token']:
                 print("⚠️ GitHub token تنظیم نشده است")
@@ -268,10 +303,8 @@ Backup خودکار سیستم مدیریت انبار داروخانه با م�
         # فشرده‌سازی
         zip_path = self.compress_backup(backup_path, metadata_path)
         
-        # ارسال به ایمیل
+        # ارسال به ایمیل و GitHub (در صورت فعال بودن)
         email_success = self.send_email_backup(zip_path)
-        
-        # آپلود به GitHub
         github_success = self.upload_to_github(zip_path)
         
         # پاک‌سازی فایل‌های قدیمی
@@ -286,15 +319,14 @@ Backup خودکار سیستم مدیریت انبار داروخانه با م�
 
     def schedule_backups(self):
         """زمان‌بندی backup های خودکار"""
-        # backup روزانه ساعت 2 صبح
-        schedule.every().day.at("02:00").do(self.run_backup)
-        
-        # backup هفتگی یکشنبه ساعت 3 صبح
-        schedule.every().sunday.at("03:00").do(self.run_backup)
-        
+        daily_time = os.getenv('BACKUP_DAILY_TIME', '02:00')
+        weekly_time = os.getenv('BACKUP_WEEKLY_TIME', '03:00')
+        schedule.every().day.at(daily_time).do(self.run_backup)
+        schedule.every().sunday.at(weekly_time).do(self.run_backup)
+
         print("📅 زمان‌بندی backup ها:")
-        print("   🌅 روزانه: ساعت 2:00 صبح")
-        print("   📅 هفتگی: یکشنبه ساعت 3:00 صبح")
+        print(f"   🌅 روزانه: ساعت {daily_time}")
+        print(f"   📅 هفتگی: یکشنبه ساعت {weekly_time}")
 
 def main():
     """تابع اصلی"""

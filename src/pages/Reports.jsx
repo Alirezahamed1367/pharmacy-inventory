@@ -34,72 +34,84 @@ import {
   SwapHoriz as MovementIcon,
   Warning as WarningIcon,
 } from '@mui/icons-material'
-import { supabase } from '../services/supabase'
-import { 
-  getInventoryView, 
-  getMovementsView, 
-  getWarehouses, 
-  getActiveDrugs 
-} from '../services/supabase'
+import { getInventoryDetailed, getWarehouses, getActiveDrugs, isBackendAvailable, getMovementHistory } from '../services/supabase'
+import Skeleton from '@mui/material/Skeleton'
 
 const Reports = () => {
   const [tabValue, setTabValue] = useState(0)
   const [selectedWarehouse, setSelectedWarehouse] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
+  // statusFilter حذف شد (نیاز فعلی ندارد)
   const [drugFilter, setDrugFilter] = useState('')
   const [selectedDrugForWarehouse, setSelectedDrugForWarehouse] = useState('')
   const [inventory, setInventory] = useState([])
-  const [movements, setMovements] = useState([])
-  const [expiring, setExpiring] = useState([])
+  const [expired, setExpired] = useState([])
+  const [expiringSoon, setExpiringSoon] = useState([])
+  const [expiringMid, setExpiringMid] = useState([])
   const [warehouses, setWarehouses] = useState([])
   const [drugs, setDrugs] = useState([])
+  const [movements, setMovements] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   // دریافت داده‌ها از دیتابیس
   useEffect(() => {
+    if (!isBackendAvailable()) {
+      setLoading(false)
+      setError(null)
+      return
+    }
     fetchReportsData()
   }, [])
 
   const fetchReportsData = async () => {
     setLoading(true)
     try {
-      // دریافت موجودی از view
-      const inventoryResult = await getInventoryView()
+      const [inventoryResult, warehousesResult, drugsResult] = await Promise.all([
+        getInventoryDetailed(),
+        getWarehouses(),
+        getActiveDrugs()
+      ])
       if (inventoryResult.error) throw new Error(inventoryResult.error.message)
-
-      // دریافت حرکت‌ها از view
-      const movementsResult = await getMovementsView()
-      if (movementsResult.error) throw new Error(movementsResult.error.message)
-
-      // دریافت انبارها
-      const warehousesResult = await getWarehouses()
       if (warehousesResult.error) throw new Error(warehousesResult.error.message)
-
-      // دریافت داروها
-      const drugsResult = await getActiveDrugs()
       if (drugsResult.error) throw new Error(drugsResult.error.message)
 
-      setInventory(inventoryResult.data || [])
-      setMovements(movementsResult.data || [])
+      const inventoryData = (inventoryResult.data || []).map(item => ({
+        ...item,
+        drug_name: item.drug?.name,
+        expire_date: item.drug?.expire_date,
+        package_type: item.drug?.package_type,
+        warehouse_name: item.warehouse?.name,
+        image_url: item.drug?.image_url
+      }))
+      setInventory(inventoryData)
       setWarehouses(warehousesResult.data || [])
       setDrugs(drugsResult.data || [])
 
-      // محاسبه داروهای در حال انقضا
-      const expiringDrugs = inventoryResult.data?.filter(item => {
-        if (!item.expiry_date) return false
-        const expiryDate = new Date(item.expiry_date)
-        const today = new Date()
+      // محاسبه وضعیت انقضا
+      const today = new Date()
+      const expiredList = []
+      const expiringSoonList = []
+      const expiringMidList = []
+      for (const item of inventoryData) {
+        if (!item.expire_date) continue
+        const expiryDate = new Date(item.expire_date)
         const diffTime = expiryDate - today
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-        return diffDays <= 90 && diffDays >= 0
-      }) || []
-
-      setExpiring(expiringDrugs)
+        if (diffDays < 0) {
+          expiredList.push({ ...item, diffDays })
+        } else if (diffDays <= 30) {
+          expiringSoonList.push({ ...item, diffDays })
+        } else if (diffDays <= 90) {
+          expiringMidList.push({ ...item, diffDays })
+        }
+      }
+      setExpired(expiredList)
+      setExpiringSoon(expiringSoonList)
+      setExpiringMid(expiringMidList)
       setError(null)
     } catch (error) {
       console.error('خطا در دریافت گزارشات:', error)
-      setError('خطا در دریافت گزارشات: ' + error.message)
+      setError(isBackendAvailable() ? ('خطا در دریافت گزارشات: ' + error.message) : 'اتصال به سرور برقرار نیست (حالت آفلاین)')
     } finally {
       setLoading(false)
     }
@@ -110,7 +122,7 @@ const Reports = () => {
   }
 
   const handleExport = (format) => {
-    const filteredData = getFilteredInventory()
+  // خروجی گزارش برای export (در نسخه ساده فعلی فقط اعلان نمایشی)
     
     if (format === 'excel') {
       // شبیه‌سازی دانلود اکسل
@@ -125,26 +137,15 @@ const Reports = () => {
     return inventory.filter(item => {
       const matchesWarehouse = !selectedWarehouse || item.warehouse_name?.includes(selectedWarehouse)
       const matchesDrug = !drugFilter || item.drug_name?.toLowerCase().includes(drugFilter.toLowerCase())
-      
       return matchesWarehouse && matchesDrug
     })
   }
 
-  const getFilteredMovements = () => {
-    return movements.filter(item => {
-      const matchesWarehouse = !selectedWarehouse || 
-        item.from_warehouse?.includes(selectedWarehouse) || 
-        item.to_warehouse?.includes(selectedWarehouse)
-      const matchesDrug = !drugFilter || item.drug_name?.toLowerCase().includes(drugFilter.toLowerCase())
-      
-      return matchesWarehouse && matchesDrug
-    })
-  }
+  // گزارش حرکات غیرفعال شده؛ تابع فیلتر حذف شد
 
   // گزارش موجودی یک دارو در تمام انبارها
   const getDrugWarehouseReport = () => {
     if (!selectedDrugForWarehouse) return []
-    
     return inventory
       .filter(item => item.drug_name === selectedDrugForWarehouse)
       .sort((a, b) => a.warehouse_name?.localeCompare(b.warehouse_name, 'fa'))
@@ -155,27 +156,7 @@ const Reports = () => {
     return drugs.sort((a, b) => a.name?.localeCompare(b.name, 'fa'))
   }
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'active': return 'success'
-      case 'expiring': return 'warning'
-      case 'expired': return 'error'
-      case 'completed': return 'success'
-      case 'in_transit': return 'info'
-      default: return 'default'
-    }
-  }
-
-  const getStatusText = (status) => {
-    switch (status) {
-      case 'active': return 'فعال'
-      case 'expiring': return 'نزدیک به انقضا'
-      case 'expired': return 'منقضی شده'
-      case 'completed': return 'تکمیل شده'
-      case 'in_transit': return 'در راه'
-      default: return 'نامشخص'
-    }
-  }
+  // status color/text توابع legacy حذف شدند
 
   const TabPanel = ({ children, value, index }) => (
     <div hidden={value !== index}>
@@ -185,15 +166,24 @@ const Reports = () => {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
-        <Typography sx={{ ml: 2 }}>در حال بارگذاری گزارشات...</Typography>
+      <Box p={3}>
+        <Grid container spacing={2}>
+          {Array.from({ length: 3 }).map((_,i) => (
+            <Grid item xs={12} md={4} key={i}><Skeleton variant="rounded" height={160} /></Grid>
+          ))}
+          <Grid item xs={12}><Skeleton variant="rounded" height={420} /></Grid>
+        </Grid>
       </Box>
     )
   }
 
   return (
     <Box>
+      {!isBackendAvailable() && !error && (
+        <Alert severity="info" sx={{ mb: 3 }}>
+          سیستم در حالت آفلاین اجرا شده است؛ برای مشاهده داده‌ها متغیرهای اتصال Supabase را تنظیم کنید.
+        </Alert>
+      )}
       {/* Header */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" component="h1" fontWeight="bold" gutterBottom>
@@ -316,44 +306,93 @@ const Reports = () => {
 
         {/* گزارش حرکات */}
         <TabPanel value={tabValue} index={1}>
-          <TableContainer>
+          {movements.length === 0 ? (
+            <Alert severity="info">حرکتی ثبت نشده است.</Alert>
+          ) : (
+            <TableContainer>
+              <Table size='small'>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>نوع</TableCell>
+                    <TableCell>کد</TableCell>
+                    <TableCell>تاریخ سند</TableCell>
+                    <TableCell>تاریخ ایجاد</TableCell>
+                    <TableCell>وضعیت</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {movements.map(m => (
+                    <TableRow key={m.type+"-"+m.id}>
+                      <TableCell>{m.type==='receipt'?'رسید':'حواله'}</TableCell>
+                      <TableCell>{m.id.slice(0,8)}</TableCell>
+                      <TableCell>{m.document_date ? new Date(m.document_date).toLocaleDateString('fa-IR') : '-'}</TableCell>
+                      <TableCell>{new Date(m.created_at).toLocaleDateString('fa-IR')}</TableCell>
+                      <TableCell>{m.status}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </TabPanel>
+
+        {/* داروهای منقضی */}
+        <TabPanel value={tabValue} index={2}>
+          <Typography variant="h6" sx={{ mb: 2 }}>داروهای منقضی</Typography>
+          <TableContainer sx={{ mb: 3 }}>
             <Table>
               <TableHead>
                 <TableRow>
                   <TableCell>نام دارو</TableCell>
-                  <TableCell>از انبار</TableCell>
-                  <TableCell>به انبار</TableCell>
-                  <TableCell>مقدار</TableCell>
-                  <TableCell>تاریخ</TableCell>
-                  <TableCell>نوع</TableCell>
+                  <TableCell>انبار</TableCell>
+                  <TableCell>موجودی</TableCell>
+                  <TableCell>تاریخ انقضا</TableCell>
+                  <TableCell>روزهای منقضی</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {getFilteredMovements().map((item, index) => (
+                {expired.map((item, index) => (
                   <TableRow key={index}>
                     <TableCell>{item.drug_name}</TableCell>
-                    <TableCell>{item.from_warehouse || '-'}</TableCell>
-                    <TableCell>{item.to_warehouse || '-'}</TableCell>
+                    <TableCell>{item.warehouse_name}</TableCell>
                     <TableCell>{item.quantity}</TableCell>
+                    <TableCell>{item.expire_date ? new Date(item.expire_date).toLocaleDateString('fa-IR') : 'نامشخص'}</TableCell>
                     <TableCell>
-                      {item.created_at ? new Date(item.created_at).toLocaleDateString('fa-IR') : ''}
-                    </TableCell>
-                    <TableCell>
-                      <Chip 
-                        label={item.movement_type === 'in' ? 'ورود' : 'خروج'} 
-                        color={item.movement_type === 'in' ? 'success' : 'warning'} 
-                        size="small" 
-                      />
+                      <Chip label={`${Math.abs(item.diffDays)}-`} color="error" size="small" />
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </TableContainer>
-        </TabPanel>
-
-        {/* داروهای منقضی */}
-        <TabPanel value={tabValue} index={2}>
+          <Typography variant="h6" sx={{ mb: 2 }}>داروهای در آستانه انقضا (تا ۳۰ روز آینده)</Typography>
+          <TableContainer sx={{ mb: 3 }}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>نام دارو</TableCell>
+                  <TableCell>انبار</TableCell>
+                  <TableCell>موجودی</TableCell>
+                  <TableCell>تاریخ انقضا</TableCell>
+                  <TableCell>روزهای باقی‌مانده</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {expiringSoon.map((item, index) => (
+                  <TableRow key={index}>
+                    <TableCell>{item.drug_name}</TableCell>
+                    <TableCell>{item.warehouse_name}</TableCell>
+                    <TableCell>{item.quantity}</TableCell>
+                    <TableCell>{item.expire_date ? new Date(item.expire_date).toLocaleDateString('fa-IR') : 'نامشخص'}</TableCell>
+                    <TableCell>
+                      <Chip label={`${item.diffDays} روز`} color="error" size="small" />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          <Typography variant="h6" sx={{ mb: 2 }}>داروهای در آستانه انقضا (۳۱ تا ۹۰ روز آینده)</Typography>
           <TableContainer>
             <Table>
               <TableHead>
@@ -366,30 +405,17 @@ const Reports = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {expiring.map((item, index) => {
-                  const expiryDate = new Date(item.expiry_date)
-                  const today = new Date()
-                  const diffTime = expiryDate - today
-                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-                  
-                  return (
-                    <TableRow key={index}>
-                      <TableCell>{item.drug_name}</TableCell>
-                      <TableCell>{item.warehouse_name}</TableCell>
-                      <TableCell>{item.quantity}</TableCell>
-                      <TableCell>
-                        {expiryDate.toLocaleDateString('fa-IR')}
-                      </TableCell>
-                      <TableCell>
-                        <Chip 
-                          label={`${diffDays} روز`} 
-                          color={diffDays <= 30 ? 'error' : 'warning'} 
-                          size="small" 
-                        />
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
+                {expiringMid.map((item, index) => (
+                  <TableRow key={index}>
+                    <TableCell>{item.drug_name}</TableCell>
+                    <TableCell>{item.warehouse_name}</TableCell>
+                    <TableCell>{item.quantity}</TableCell>
+                    <TableCell>{item.expire_date ? new Date(item.expire_date).toLocaleDateString('fa-IR') : 'نامشخص'}</TableCell>
+                    <TableCell>
+                      <Chip label={`${item.diffDays} روز`} color="warning" size="small" />
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </TableContainer>

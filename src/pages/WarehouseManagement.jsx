@@ -36,7 +36,7 @@ import {
   Inventory as InventoryIcon,
   SwapHoriz as TransferIcon,
 } from '@mui/icons-material'
-import TransferDialog from '../components/TransferDialog'
+// TransferDialog حذف شده؛ استفاده از صفحه مستقل Transfers
 import { ManagerSelect } from '../components/DropdownSelects'
 
 import { useEffect } from 'react'
@@ -52,7 +52,7 @@ export default function WarehouseManagement() {
   const [warehouses, setWarehouses] = useState([])
   const [managers, setManagers] = useState([])
   const [openDialog, setOpenDialog] = useState(false)
-  const [openTransferDialog, setOpenTransferDialog] = useState(false)
+  // انتقال‌ها اکنون در صفحه جداگانه مدیریت می‌شوند
   const [selectedWarehouse, setSelectedWarehouse] = useState(null)
   const [formData, setFormData] = useState({
     name: '',
@@ -182,10 +182,10 @@ export default function WarehouseManagement() {
           <Button
             variant="outlined"
             startIcon={<TransferIcon />}
-            onClick={() => setOpenTransferDialog(true)}
+            onClick={() => window.location.href = '/transfers'}
             size="large"
           >
-            حواله انتقالی
+            حواله‌ها
           </Button>
           <Button
             variant="contained"
@@ -345,19 +345,7 @@ export default function WarehouseManagement() {
         </DialogActions>
       </Dialog>
 
-      {/* Transfer Dialog */}
-      <TransferDialog
-        open={openTransferDialog}
-        onClose={() => setOpenTransferDialog(false)}
-        onSave={(transferData) => {
-          console.log('انتقال ثبت شد:', transferData);
-          alert('انتقال با موفقیت ثبت شد!');
-          setOpenTransferDialog(false);
-        }}
-        title="حواله انتقالی بین انبارها"
-        type="transfer"
-        mode="add"
-      />
+      {/* انتقال‌ها در صفحه Transfers مدیریت می‌شود */}
     </Box>
   )
 }

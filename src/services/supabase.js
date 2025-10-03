@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import bcrypt from 'bcryptjs'
 
 // استفاده از environment variables برای امنیت
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co'
@@ -7,6 +8,8 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key'
 // ایجاد کلاینت Supabase
 export const supabase = import.meta.env.VITE_SUPABASE_URL ? 
   createClient(supabaseUrl, supabaseKey) : null
+
+export const isBackendAvailable = () => !!(import.meta.env.VITE_SUPABASE_URL && supabase)
 
 // =====================================================
 // تنظیمات Storage برای تصاویر
@@ -20,27 +23,20 @@ export const STORAGE_CONFIG = {
 
 // تابع احراز هویت
 export const signIn = async (username, password) => {
-  if (!supabase) {
-    throw new Error('Supabase اتصال به دیتابیس برقرار نیست. لطفاً متغیرهای محیطی را بررسی کنید')
-  }
-
+  if (!supabase) throw new Error('Supabase پیکربندی نشده است')
   try {
-    // ورود با جستجوی کاربر در جدول users
-    const { data: userData, error: userError } = await supabase
+    const { data: user, error } = await supabase
       .from('users')
-      .select('*')
+      .select('id, username, password_hash, full_name, role, is_active')
       .eq('username', username)
-      .eq('password', password)
-      .eq('active', true)
       .single()
-
-    if (userError || !userData) {
-      return { data: null, error: { message: 'نام کاربری یا رمز عبور اشتباه است' } }
-    }
-
-    return { data: { user: userData }, error: null }
-  } catch (error) {
-    return { data: null, error: { message: 'خطا در ورود به سیستم: ' + error.message } }
+    if (error || !user) return { data: null, error: { message: 'نام کاربری یا رمز عبور اشتباه است' } }
+    if (user.is_active === false) return { data: null, error: { message: 'کاربر غیرفعال است' } }
+    const ok = await bcrypt.compare(password, user.password_hash || '')
+    if (!ok) return { data: null, error: { message: 'نام کاربری یا رمز عبور اشتباه است' } }
+    return { data: { user }, error: null }
+  } catch (e) {
+    return { data: null, error: { message: 'خطا در ورود: ' + e.message } }
   }
 }
 
@@ -56,43 +52,28 @@ export const signOut = async () => {
 
 // تغییر رمز عبور
 export const changePassword = async (userId, currentPassword, newPassword) => {
-  if (!supabase) {
-    return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
-  }
-
+  if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
   try {
-    // بررسی رمز عبور فعلی
-    const { data: userData, error: userError } = await supabase
+    // دریافت password_hash برای کاربر
+    const { data: user, error: userErr } = await supabase
       .from('users')
-      .select('password')
+      .select('id, password_hash')
       .eq('id', userId)
       .single()
+    if (userErr || !user) return { error: { message: 'کاربر یافت نشد' } }
 
-    if (userError || !userData) {
-      return { error: { message: 'خطا در دریافت اطلاعات کاربر' } }
-    }
+    const valid = await bcrypt.compare(currentPassword, user.password_hash || '')
+    if (!valid) return { error: { message: 'رمز عبور فعلی اشتباه است' } }
 
-    // بررسی رمز عبور فعلی
-    if (userData.password !== currentPassword) {
-      return { error: { message: 'رمز عبور فعلی اشتباه است' } }
-    }
-
-    // به‌روزرسانی رمز عبور
-    const { error: updateError } = await supabase
+    const newHash = await bcrypt.hash(newPassword, 10)
+    const { error: updErr } = await supabase
       .from('users')
-      .update({ 
-        password: newPassword,
-        updated_at: new Date().toISOString()
-      })
+      .update({ password_hash: newHash })
       .eq('id', userId)
-
-    if (updateError) {
-      return { error: { message: 'خطا در تغییر رمز عبور: ' + updateError.message } }
-    }
-
+    if (updErr) return { error: { message: 'خطا در تغییر رمز عبور: ' + updErr.message } }
     return { error: null }
-  } catch (error) {
-    return { error: { message: 'خطا در تغییر رمز عبور: ' + error.message } }
+  } catch (e) {
+    return { error: { message: 'خطا در تغییر رمز عبور: ' + e.message } }
   }
 }
 
@@ -198,17 +179,25 @@ export const dbAPI = {
 // تابع آپلود تصویر
 export const uploadImage = async (file, bucket = 'drug-images') => {
   if (!supabase) {
-    return { data: null, error: { message: 'Supabase not configured' } }
+    return { data: null, error: { message: 'اتصال پایگاه داده برقرار نیست (حالت آفلاین)' } }
   }
 
   try {
-    // ایجاد نام یکتا برای فایل
-    const fileExt = file.name.split('.').pop()
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`
-    const filePath = `${bucket}/${fileName}`
+    // اعتبارسنجی اندازه و نوع
+    if (!STORAGE_CONFIG.allowedTypes.includes(file.type)) {
+      return { data: null, error: { message: 'فرمت فایل مجاز نیست' } }
+    }
+    if (file.size > STORAGE_CONFIG.maxFileSize) {
+      return { data: null, error: { message: 'حجم فایل بزرگ‌تر از حد مجاز است' } }
+    }
 
-    // آپلود فایل
-    const { data, error } = await supabase.storage
+    const fileExt = file.name.split('.').pop()
+    const unique = `${Date.now()}-${Math.random().toString(36).slice(2,9)}`
+    const fileName = `${unique}.${fileExt}`
+    // مسیر داخل باکت (نباید نام باکت تکرار شود)
+    const filePath = `${STORAGE_CONFIG.uploadPath}/${fileName}`
+
+    const { error } = await supabase.storage
       .from(bucket)
       .upload(filePath, file, {
         cacheControl: '3600',
@@ -216,26 +205,25 @@ export const uploadImage = async (file, bucket = 'drug-images') => {
       })
 
     if (error) {
-      throw error
+      return { data: null, error: { message: 'خطا در آپلود تصویر: ' + error.message } }
     }
 
-    // دریافت URL عمومی
     const { data: urlData } = supabase.storage
       .from(bucket)
       .getPublicUrl(filePath)
 
-    return { 
-      data: { 
+    return {
+      data: {
         url: urlData.publicUrl,
         path: filePath,
-        fileName: fileName
-      }, 
-      error: null 
+        fileName
+      },
+      error: null
     }
   } catch (error) {
-    return { 
-      data: null, 
-      error: { message: 'خطا در آپلود تصویر: ' + error.message } 
+    return {
+      data: null,
+      error: { message: 'خطای غیرمنتظره آپلود: ' + error.message }
     }
   }
 }
@@ -272,111 +260,40 @@ export const getImageUrl = (filePath, bucket = 'drug-images') => {
 
 // ===== توابع مدیریت داروها =====
 
-// دریافت لیست داروها
+// دریافت لیست داروها (مرتب بر اساس تاریخ انقضا و سپس نام)
 export const getDrugs = async () => {
-  if (!supabase) {
-    return { data: [], error: null }
-  }
-
+  if (!supabase) return { data: [], error: null }
   try {
-    // Get drugs with basic information
     const { data, error } = await supabase
       .from('drugs')
-      .select(`
-        *,
-        drug_categories (
-          name
-        )
-      `)
-      .eq('active', true)
-      .order('name')
-
-    if (error) {
-      console.error('Error fetching drugs:', error)
-      return { data: [], error }
-    }
-
-    // Transform data to match expected format
-    const transformedData = data?.map(drug => ({
-      id: drug.id,
-      name: drug.name,
-      generic_name: drug.generic_name,
-      description: drug.description,
-      dosage: drug.dosage,
-      form: drug.form,
-      manufacturer: drug.manufacturer,
-      category: drug.drug_categories?.name || 'عمومی',
-      features: drug.features,
-      image_url: drug.image_url,
-      barcode: drug.barcode,
-      min_stock_level: drug.min_stock_level,
-      max_stock_level: drug.max_stock_level,
-      price: drug.unit_price,
-      unit_price: drug.unit_price,
-      active: drug.active,
-      created_at: drug.created_at,
-      updated_at: drug.updated_at
-    })) || []
-
-    return { data: transformedData, error: null }
+      .select('*')
+      .order('expire_date', { ascending: true })
+      .order('name', { ascending: true })
+    if (error) return { data: [], error }
+    return { data: data || [], error: null }
   } catch (error) {
-    console.error('Exception in getDrugs:', error)
     return { data: [], error: { message: 'خطا در دریافت داروها: ' + error.message } }
   }
 }
 
 // افزودن دارو جدید
 export const addDrug = async (drugData) => {
-  if (!supabase) {
-    return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
-  }
-
+  if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
   try {
-    // Insert drug into drugs table
-    const { data: drugResult, error: drugError } = await supabase
+    const { name, description, package_type, expire_date, image_url } = drugData || {}
+    if (!name || !expire_date) return { error: { message: 'نام و تاریخ انقضا الزامی هستند' } }
+    // درج
+    const { data, error } = await supabase
       .from('drugs')
-      .insert([{
-        name: drugData.name,
-        generic_name: drugData.generic_name,
-        description: drugData.description,
-        dosage: drugData.dosage,
-        form: drugData.form,
-        manufacturer: drugData.manufacturer,
-        features: drugData.features,
-        image_url: drugData.image_url,
-        barcode: drugData.barcode,
-        min_stock_level: drugData.min_stock_level || 0,
-        max_stock_level: drugData.max_stock_level || 1000,
-        unit_price: drugData.price ? parseFloat(drugData.price) : 0,
-        active: true
-      }])
+      .insert([{ name: name.trim(), description: description?.trim() || null, package_type: package_type || null, expire_date, image_url: image_url || null }])
       .select()
-
-    if (drugError) {
-      return { error: drugError }
-    }
-
-    // If warehouse_id and quantity are provided, add to inventory
-    if (drugData.warehouse_id && drugData.quantity) {
-      const { error: inventoryError } = await supabase
-        .from('warehouse_inventory')
-        .insert([{
-          warehouse_id: drugData.warehouse_id,
-          drug_id: drugResult[0].id,
-          batch_number: drugData.batch_number || 'BATCH-' + Date.now(),
-          quantity: parseInt(drugData.quantity) || 0,
-          unit_cost: drugData.price ? parseFloat(drugData.price) : 0,
-          manufacture_date: drugData.manufacture_date || null,
-          expire_date: drugData.expiry_date || null
-        }])
-
-      if (inventoryError) {
-        // If inventory insert fails, we might want to delete the drug too
-        console.error('خطا در افزودن به موجودی:', inventoryError)
+    if (error) {
+      if (error.message && (error.message.includes('duplicate key') || error.message.includes('unique constraint')) ) {
+        return { error: { message: 'این ترکیب (نام + بسته‌بندی + تاریخ انقضا) قبلاً وجود دارد' } }
       }
+      return { error }
     }
-
-    return { data: drugResult[0], error: null }
+    return { data: data[0], error: null }
   } catch (error) {
     return { error: { message: 'خطا در افزودن دارو: ' + error.message } }
   }
@@ -389,69 +306,15 @@ export const updateDrug = async (id, drugData) => {
   }
 
   try {
-    // Update drug in drugs table
-    const { data: drugResult, error: drugError } = await supabase
+    const { name, description, package_type, expire_date, image_url } = drugData || {}
+    if (!name || !expire_date) return { error: { message: 'نام و تاریخ انقضا الزامی هستند' } }
+    const { data, error } = await supabase
       .from('drugs')
-      .update({
-        name: drugData.name,
-        generic_name: drugData.generic_name,
-        description: drugData.description,
-        dosage: drugData.dosage,
-        form: drugData.form,
-        manufacturer: drugData.manufacturer,
-        features: drugData.features,
-        image_url: drugData.image_url,
-        barcode: drugData.barcode,
-        min_stock_level: drugData.min_stock_level || 0,
-        max_stock_level: drugData.max_stock_level || 1000,
-        unit_price: drugData.price ? parseFloat(drugData.price) : 0,
-        updated_at: new Date().toISOString()
-      })
+      .update({ name, description: description || null, package_type: package_type || null, expire_date, image_url: image_url || null })
       .eq('id', id)
       .select()
-
-    if (drugError) {
-      return { error: drugError }
-    }
-
-    // Update inventory if warehouse_id and quantity are provided
-    if (drugData.warehouse_id && drugData.quantity !== undefined) {
-      // Check if inventory record exists
-      const { data: existingInventory } = await supabase
-        .from('warehouse_inventory')
-        .select('*')
-        .eq('drug_id', id)
-        .eq('warehouse_id', drugData.warehouse_id)
-        .single()
-
-      if (existingInventory) {
-        // Update existing inventory
-        await supabase
-          .from('warehouse_inventory')
-          .update({
-            quantity: parseInt(drugData.quantity) || 0,
-            unit_cost: drugData.price ? parseFloat(drugData.price) : 0,
-            expire_date: drugData.expiry_date || null,
-            last_updated: new Date().toISOString()
-          })
-          .eq('drug_id', id)
-          .eq('warehouse_id', drugData.warehouse_id)
-      } else {
-        // Create new inventory record
-        await supabase
-          .from('warehouse_inventory')
-          .insert([{
-            warehouse_id: drugData.warehouse_id,
-            drug_id: id,
-            batch_number: drugData.batch_number || 'BATCH-' + Date.now(),
-            quantity: parseInt(drugData.quantity) || 0,
-            unit_cost: drugData.price ? parseFloat(drugData.price) : 0,
-            expire_date: drugData.expiry_date || null
-          }])
-      }
-    }
-
-    return { data: drugResult[0], error: null }
+    if (error) return { error }
+    return { data: data[0], error: null }
   } catch (error) {
     return { error: { message: 'خطا در ویرایش دارو: ' + error.message } }
   }
@@ -466,7 +329,7 @@ export const deleteDrug = async (id) => {
   try {
     const { error } = await supabase
       .from('drugs')
-      .update({ active: false })
+      .delete()
       .eq('id', id)
 
     return { error }
@@ -493,10 +356,9 @@ export const getWarehouses = async () => {
 
   try {
     const { data, error } = await supabase
-      .from('warehouses')
-      .select('*')
-      .eq('active', true)
-      .order('name')
+  .from('warehouses')
+  .select('*')
+  .order('name')
 
     return { data: data || [], error }
   } catch (error) {
@@ -529,16 +391,16 @@ export const addWarehouse = async (warehouseData) => {
   }
 
   try {
-    const { data, error } = await supabase
+    const { data: inserted, error } = await supabase
       .from('warehouses')
-      .insert([{ ...warehouseData, active: true }])
+      .insert([ warehouseData ])
       .select()
 
     if (error) {
       return { error }
     }
 
-    return { data: data[0], error: null }
+    return { data: inserted[0], error: null }
   } catch (error) {
     return { error: { message: 'خطا در افزودن انبار: ' + error.message } }
   }
@@ -597,11 +459,10 @@ export const getWarehouseManagers = async () => {
 
   try {
     const { data, error } = await supabase
-      .from('users')
-      .select('id, full_name, role, phone')
-      .eq('role', 'manager')
-      .eq('active', true)
-      .order('full_name')
+  .from('users')
+  .select('id, full_name, role')
+  .eq('role', 'manager')
+  .order('full_name')
 
     return { data: data || [], error }
   } catch (error) {
@@ -656,13 +517,286 @@ export const getActiveDrugs = async () => {
 
   try {
     const { data, error } = await supabase
-      .from('drugs')
-      .select('*')
-      .eq('active', true)
-      .order('name')
+  .from('drugs')
+  .select('*')
+  .order('name')
 
     return { data: data || [], error }
   } catch (error) {
     return { data: [], error: { message: 'خطا در دریافت داروها: ' + error.message } }
   }
 }
+
+// دریافت موجودی با جزئیات (دارو + انبار) برای گزارش‌ها
+export const getInventoryDetailed = async () => {
+  if (!supabase) return { data: [], error: null }
+  try {
+    const { data, error } = await supabase
+      .from('inventory')
+      .select(`
+        id,
+        quantity,
+        batch_number,
+        drug:drugs(id,name,expire_date,package_type,image_url),
+        warehouse:warehouses(id,name)
+      `)
+    return { data: data || [], error }
+  } catch (e) {
+    return { data: [], error: { message: 'خطا در دریافت موجودی: ' + e.message } }
+  }
+}
+
+// =====================================================
+// Receipt Workflow Functions
+// =====================================================
+
+// دریافت لیست رسیدها (status فیلتر اختیاری)
+export const getReceipts = async (status = null) => {
+  if (!supabase) return { data: [], error: null }
+  try {
+    let query = supabase.from('receipts').select('*').order('created_at', { ascending: false })
+    if (status) query = query.eq('status', status)
+    const { data, error } = await query
+    return { data: data || [], error }
+  } catch (error) {
+    return { data: [], error: { message: 'خطا در دریافت رسیدها: ' + error.message } }
+  }
+}
+
+// ایجاد رسید جدید (در وضعیت pending)
+export const createReceipt = async ({ supplier_id = null, destination_warehouse_id, notes = null, items = [], document_date = null }) => {
+  if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
+  if (!destination_warehouse_id) return { error: { message: 'انبار مقصد الزامی است' } }
+  if (!Array.isArray(items) || items.length === 0) return { error: { message: 'حداقل یک آیتم رسید لازم است' } }
+
+  const receipt = { supplier_id, destination_warehouse_id, status: 'pending', notes, document_date: document_date || new Date().toISOString().slice(0,10) }
+
+  const { data: receiptData, error: receiptError } = await supabase
+    .from('receipts')
+    .insert([receipt])
+    .select()
+    .single()
+  if (receiptError) return { error: receiptError }
+
+  // درج آیتم‌ها (اکنون supplier_id اختصاصی هر آیتم ممکن است)
+  const itemsToInsert = items.map(it => ({
+    receipt_id: receiptData.id,
+    drug_id: it.drug_id,
+    quantity: it.quantity,
+    batch_number: it.batch_number || null,
+    supplier_id: it.supplier_id || supplier_id || null
+  }))
+  const { error: itemsError } = await supabase.from('receipt_items').insert(itemsToInsert)
+  if (itemsError) return { error: itemsError }
+  return { data: receiptData, error: null }
+}
+
+// تکمیل رسید: تغییر وضعیت + به‌روزرسانی موجودی (upsert)
+export const completeReceipt = async (receipt_id) => {
+  if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
+  try {
+    // دریافت آیتم‌های رسید
+    const { data: items, error: itemsError } = await supabase
+      .from('receipt_items')
+      .select('id, drug_id, quantity, batch_number, receipt_id, receipts(destination_warehouse_id)')
+      .eq('receipt_id', receipt_id)
+    if (itemsError) return { error: itemsError }
+    if (!items || items.length === 0) return { error: { message: 'آیتمی برای این رسید ثبت نشده است' } }
+
+    const destinationWarehouseId = items[0].receipts?.destination_warehouse_id
+    if (!destinationWarehouseId) return { error: { message: 'انبار مقصد یافت نشد' } }
+
+    // Upsert موجودی برای هر آیتم (drug_id + warehouse + batch)
+    for (const item of items) {
+      const { data: existing, error: invErr } = await supabase
+        .from('inventory')
+        .select('id, quantity')
+        .eq('drug_id', item.drug_id)
+        .eq('warehouse_id', destinationWarehouseId)
+        .eq('batch_number', item.batch_number || null)
+        .maybeSingle()
+      if (invErr) return { error: invErr }
+
+      if (existing) {
+        const { error: updErr } = await supabase
+          .from('inventory')
+          .update({ quantity: existing.quantity + item.quantity, updated_at: new Date().toISOString() })
+          .eq('id', existing.id)
+        if (updErr) return { error: updErr }
+      } else {
+        const { error: insErr } = await supabase
+          .from('inventory')
+          .insert([{ drug_id: item.drug_id, warehouse_id: destinationWarehouseId, quantity: item.quantity, batch_number: item.batch_number || null }])
+        if (insErr) return { error: insErr }
+      }
+    }
+
+    // بروزرسانی وضعیت رسید
+    const { error: receiptUpdateError } = await supabase
+      .from('receipts')
+      .update({ status: 'completed', completed_at: new Date().toISOString() })
+      .eq('id', receipt_id)
+    if (receiptUpdateError) return { error: receiptUpdateError }
+    return { error: null }
+  } catch (error) {
+    return { error: { message: 'خطا در تکمیل رسید: ' + error.message } }
+  }
+}
+
+// افزودن آیتم جدید به رسید pending
+export const addReceiptItem = async (receipt_id, item) => {
+  if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
+  if (!item?.drug_id || !item?.quantity) return { error: { message: 'آیتم نامعتبر است' } }
+  const { error } = await supabase
+    .from('receipt_items')
+    .insert([{ receipt_id, drug_id: item.drug_id, quantity: item.quantity, batch_number: item.batch_number || null, supplier_id: item.supplier_id || null }])
+  return { error }
+}
+
+// حذف آیتم از رسید pending
+export const deleteReceiptItem = async (item_id) => {
+  if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
+  const { error } = await supabase.from('receipt_items').delete().eq('id', item_id)
+  return { error }
+}
+
+// دریافت آیتم‌های یک رسید
+export const getReceiptItems = async (receipt_id) => {
+  if (!supabase) return { data: [], error: null }
+  const { data, error } = await supabase
+    .from('receipt_items')
+    .select('*, drugs(name, expire_date, package_type), suppliers(name)')
+    .eq('receipt_id', receipt_id)
+  return { data: data || [], error }
+}
+
+// =====================================================
+// Transfer Workflow Functions
+// =====================================================
+
+export const getTransfers = async (status = null) => {
+  if (!supabase) return { data: [], error: null }
+  try {
+    let q = supabase.from('transfers').select('*').order('created_at', { ascending: false })
+    if (status) q = q.eq('status', status)
+    const { data, error } = await q
+    return { data: data || [], error }
+  } catch (e) {
+    return { data: [], error: { message: 'خطا در دریافت حواله‌ها: ' + e.message } }
+  }
+}
+
+// ایجاد حواله جدید با وضعیت in_transit و آیتم‌ها (quantity_sent) و رزرو موقت کسر از موجودی مبدا
+export const createTransfer = async ({ source_warehouse_id, destination_warehouse_id, notes = null, items = [], document_date = null }) => {
+  if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
+  if (!source_warehouse_id || !destination_warehouse_id) return { error: { message: 'انبار مبدا و مقصد الزامی است' } }
+  if (source_warehouse_id === destination_warehouse_id) return { error: { message: 'انبار مبدا و مقصد نمی‌تواند یکسان باشد' } }
+  if (!Array.isArray(items) || items.length === 0) return { error: { message: 'حداقل یک آیتم حواله لازم است' } }
+
+  const userId = getCurrentUserId() || '00000000-0000-0000-0000-000000000000'
+  const base = { source_warehouse_id, destination_warehouse_id, status: 'in_transit', notes, created_by_user_id: userId, document_date: document_date || new Date().toISOString().slice(0,10) }
+  const { data: transferData, error: tErr } = await supabase.from('transfers').insert([base]).select().single()
+  if (tErr) return { error: tErr }
+
+  // بررسی موجودی و درج آیتم‌ها
+  for (const it of items) {
+    const { data: inv, error: invErr } = await supabase
+      .from('inventory')
+      .select('id, quantity')
+      .eq('id', it.inventory_id)
+      .single()
+    if (invErr) return { error: invErr }
+    if (!inv || inv.quantity < it.quantity_sent) {
+      return { error: { message: 'موجودی کافی برای یکی از اقلام وجود ندارد' } }
+    }
+    const { error: updErr } = await supabase
+      .from('inventory')
+      .update({ quantity: inv.quantity - it.quantity_sent, updated_at: new Date().toISOString() })
+      .eq('id', inv.id)
+    if (updErr) return { error: updErr }
+    const { error: insErr } = await supabase.from('transfer_items').insert([{ transfer_id: transferData.id, inventory_id: it.inventory_id, quantity_sent: it.quantity_sent }])
+    if (insErr) return { error: insErr }
+  }
+  return { data: transferData, error: null }
+}
+
+// تکمیل حواله: ثبت quantity_received (اگر کمتر/بیشتر، وضعیت discrepancy) + افزودن/افزایش موجودی مقصد
+export const completeTransfer = async (transfer_id, receivedItems) => {
+  if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
+  try {
+    // دریافت حواله برای انبار مقصد
+    const { data: transfer, error: tErr } = await supabase.from('transfers').select('*').eq('id', transfer_id).single()
+    if (tErr || !transfer) return { error: tErr || { message: 'حواله یافت نشد' } }
+    if (transfer.status !== 'in_transit') return { error: { message: 'این حواله در وضعیت مجاز برای تکمیل نیست' } }
+
+    // دریافت آیتم‌های حواله جهت تطبیق
+    const { data: items, error: itErr } = await supabase.from('transfer_items').select('id, inventory_id, quantity_sent').eq('transfer_id', transfer_id)
+    if (itErr) return { error: itErr }
+
+    let discrepancy = false
+    for (const it of items) {
+      const recv = receivedItems.find(r => r.transfer_item_id === it.id)
+      const qtyReceived = recv ? Number(recv.quantity_received) : it.quantity_sent
+      if (qtyReceived !== it.quantity_sent) discrepancy = true
+      // بروزرسانی رکورد آیتم
+      const { error: updItemErr } = await supabase.from('transfer_items').update({ quantity_received: qtyReceived, discrepancy_notes: recv?.discrepancy_notes || null }).eq('id', it.id)
+      if (updItemErr) return { error: updItemErr }
+      // پیدا کردن رکورد inventory مبدا + استخراج drug_id, warehouse_id, batch برای ساخت رکورد مقصد
+      const { data: invSrc, error: invSrcErr } = await supabase.from('inventory').select('drug_id, batch_number').eq('id', it.inventory_id).single()
+      if (invSrcErr) return { error: invSrcErr }
+      // موجودی مقصد را upsert کن
+      const { data: invDest, error: findDestErr } = await supabase
+        .from('inventory')
+        .select('id, quantity')
+        .eq('drug_id', invSrc.drug_id)
+        .eq('warehouse_id', transfer.destination_warehouse_id)
+        .eq('batch_number', invSrc.batch_number)
+        .maybeSingle()
+      if (findDestErr) return { error: findDestErr }
+      if (invDest) {
+        const { error: updDestErr } = await supabase.from('inventory').update({ quantity: invDest.quantity + qtyReceived, updated_at: new Date().toISOString() }).eq('id', invDest.id)
+        if (updDestErr) return { error: updDestErr }
+      } else {
+        const { error: insDestErr } = await supabase.from('inventory').insert([{ drug_id: invSrc.drug_id, warehouse_id: transfer.destination_warehouse_id, quantity: qtyReceived, batch_number: invSrc.batch_number }])
+        if (insDestErr) return { error: insDestErr }
+      }
+    }
+
+    const finalStatus = discrepancy ? 'discrepancy' : 'completed'
+    const { error: updTransferErr } = await supabase.from('transfers').update({ status: finalStatus, completed_at: new Date().toISOString() }).eq('id', transfer_id)
+    if (updTransferErr) return { error: updTransferErr }
+    return { error: null }
+  } catch (e) {
+    return { error: { message: 'خطا در تکمیل حواله: ' + e.message } }
+  }
+}
+
+// دریافت آیتم‌های حواله (با جزئیات موجودی و دارو)
+export const getTransferItems = async (transfer_id) => {
+  if (!supabase) return { data: [], error: null }
+  const { data, error } = await supabase
+    .from('transfer_items')
+    .select('*, inventory(id, drug_id, batch_number, quantity, drug:drugs(name, expire_date, package_type))')
+    .eq('transfer_id', transfer_id)
+  return { data: data || [], error }
+}
+
+// تاریخچه حرکات (رسید + حواله)
+export const getMovementHistory = async () => {
+  if (!supabase) return { data: [], error: null }
+  try {
+    const [r, t] = await Promise.all([
+      supabase.from('receipts').select('id, document_date, created_at, status').limit(50),
+      supabase.from('transfers').select('id, document_date, created_at, status').limit(50)
+    ])
+    if (r.error) return { data: [], error: r.error }
+    if (t.error) return { data: [], error: t.error }
+    const recs = (r.data||[]).map(x=>({ id: x.id, type:'receipt', status: x.status, document_date: x.document_date, created_at: x.created_at }))
+    const trs = (t.data||[]).map(x=>({ id: x.id, type:'transfer', status: x.status, document_date: x.document_date, created_at: x.created_at }))
+    const merged = [...recs, ...trs].sort((a,b)=> new Date(b.created_at) - new Date(a.created_at)).slice(0,50)
+    return { data: merged, error: null }
+  } catch (e) {
+    return { data: [], error: { message: 'خطا در دریافت تاریخچه حرکات: ' + e.message } }
+  }
+}
+

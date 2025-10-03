@@ -130,7 +130,9 @@ const Settings = () => {
       if (suppliersData && suppliersData.length > 0) {
         try {
           suppliersList = JSON.parse(suppliersData[0].setting_value)
-        } catch {}
+        } catch {
+          // ignore JSON parse error for suppliers settings
+        }
       }
       setSuppliers(suppliersList)
     } catch (err) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   Paper,
   Typography,
@@ -16,13 +16,12 @@ import {
   TableHead,
   TableRow,
   IconButton,
-  Chip,
   Alert,
   Box,
-  MenuItem,
   FormControl,
   InputLabel,
-  Select
+  Select,
+  MenuItem
 } from '@mui/material'
 import {
   Add as AddIcon,
@@ -30,13 +29,31 @@ import {
   Delete as DeleteIcon,
   Image as ImageIcon
 } from '@mui/icons-material'
-import { supabase, getDrugs, addDrug, updateDrug, deleteDrug, uploadImage, getImageUrl, getWarehouses } from '../services/supabase'
+import { getDrugs, addDrug, updateDrug, deleteDrug } from '../services/supabase'
 import ImageUpload from '../components/ImageUpload'
 import ImageViewer from '../components/ImageViewer'
+import { buildUserError, guardOffline, isOffline } from '../utils/errorUtils'
+import { formatDMY } from '../utils/dateUtils'
 
 const DrugManagement = () => {
+  // لیست انواع بسته‌بندی
+  const packageTypes = [
+    'قرص',
+    'کپسول', 
+    'شربت',
+    'قطره',
+    'پماد',
+    'ژل',
+    'کرم',
+    'اسپری',
+    'تزریقی',
+    'ساشه',
+    'بطری',
+    'جعبه'
+  ]
+
   const [drugs, setDrugs] = useState([])
-  const [warehouses, setWarehouses] = useState([])
+  const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
   const [editingDrug, setEditingDrug] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -45,12 +62,9 @@ const DrugManagement = () => {
   const [currentImage, setCurrentImage] = useState(null)
   const [formData, setFormData] = useState({
     name: '',
-    category: '',
     description: '',
-    price: '',
-    warehouse_id: '',
-    quantity: '',
-    expiry_date: '',
+    expire_date: '',
+    package_type: '',
     image_url: ''
   })
 
@@ -60,17 +74,9 @@ const DrugManagement = () => {
 
   const loadData = async () => {
     try {
-      const [drugsResult, warehousesResult] = await Promise.all([
-        getDrugs(),
-        getWarehouses()
-      ])
-
+      const drugsResult = await getDrugs()
       if (drugsResult.data) {
         setDrugs(drugsResult.data)
-      }
-
-      if (warehousesResult.data) {
-        setWarehouses(warehousesResult.data)
       }
     } catch (error) {
       console.error('خطا در بارگذاری داده‌ها:', error)
@@ -81,46 +87,44 @@ const DrugManagement = () => {
   const resetForm = () => {
     setFormData({
       name: '',
-      category: '',
       description: '',
-      price: '',
-      warehouse_id: '',
-      quantity: '',
-      expiry_date: '',
+      expire_date: '',
+      package_type: '',
       image_url: ''
     })
     setEditingDrug(null)
   }
 
   const handleSubmit = async () => {
-    if (!formData.name || !formData.category) {
-      setAlert({ type: 'error', message: 'نام و دسته‌بندی دارو اجباری است' })
+    const offline = guardOffline()
+    if (offline.blocked) {
+      setAlert({ type: 'warning', message: offline.message })
       return
     }
-
+    if (!formData.name || !formData.package_type || !formData.expire_date) {
+      setAlert({ type: 'error', message: 'نام، نوع بسته‌بندی و تاریخ انقضا الزامی است' })
+      return
+    }
+    // بررسی تکراری نبودن ترکیب کلیدی
+    const dup = drugs.find(d => d.name === formData.name && d.package_type === formData.package_type && d.expire_date === formData.expire_date && (!editingDrug || d.id !== editingDrug.id))
+    if (dup) {
+      setAlert({ type: 'error', message: 'این واریانت (نام + بسته‌بندی + تاریخ انقضا) قبلاً وجود دارد' })
+      return
+    }
     setLoading(true)
     try {
-      if (editingDrug) {
-        const result = await updateDrug(editingDrug.id, formData)
-        if (result.error) {
-          setAlert({ type: 'error', message: result.error.message })
-        } else {
-          setAlert({ type: 'success', message: 'دارو با موفقیت ویرایش شد' })
-          setOpen(false)
-          loadData()
-        }
+      const op = editingDrug ? updateDrug(editingDrug.id, formData) : addDrug(formData)
+      const result = await op
+      if (result.error) {
+        setAlert({ type: 'error', message: buildUserError(result.error) })
       } else {
-        const result = await addDrug(formData)
-        if (result.error) {
-          setAlert({ type: 'error', message: result.error.message })
-        } else {
-          setAlert({ type: 'success', message: 'دارو با موفقیت اضافه شد' })
-          setOpen(false)
-          loadData()
-        }
+        setAlert({ type: 'success', message: editingDrug ? 'دارو با موفقیت ویرایش شد' : 'دارو با موفقیت اضافه شد' })
+        setOpen(false)
+        resetForm()
+        loadData()
       }
     } catch (error) {
-      setAlert({ type: 'error', message: 'خطا در ذخیره دارو: ' + error.message })
+      setAlert({ type: 'error', message: buildUserError(error) })
     } finally {
       setLoading(false)
     }
@@ -130,12 +134,9 @@ const DrugManagement = () => {
     setEditingDrug(drug)
     setFormData({
       name: drug.name || '',
-      category: drug.category || '',
       description: drug.description || '',
-      price: drug.price?.toString() || '',
-      warehouse_id: drug.warehouse_id || '',
-      quantity: drug.quantity?.toString() || '',
-      expiry_date: drug.expiry_date || '',
+      expire_date: drug.expire_date || '',
+      package_type: drug.package_type || '',
       image_url: drug.image_url || ''
     })
     setOpen(true)
@@ -143,7 +144,6 @@ const DrugManagement = () => {
 
   const handleDelete = async (id) => {
     if (window.confirm('آیا از حذف این دارو اطمینان دارید؟')) {
-      setLoading(true)
       try {
         const result = await deleteDrug(id)
         if (result.error) {
@@ -154,24 +154,13 @@ const DrugManagement = () => {
         }
       } catch (error) {
         setAlert({ type: 'error', message: 'خطا در حذف دارو: ' + error.message })
-      } finally {
-        setLoading(false)
       }
     }
   }
 
-  const handleImageUpload = async (file) => {
-    try {
-      const uploadResult = await uploadImage(file, 'drugs')
-      if (uploadResult.success) {
-        setFormData(prev => ({ ...prev, image_url: uploadResult.path }))
-        setAlert({ type: 'success', message: 'تصویر با موفقیت آپلود شد' })
-      } else {
-        setAlert({ type: 'error', message: uploadResult.error || 'خطا در آپلود تصویر' })
-      }
-    } catch (error) {
-      setAlert({ type: 'error', message: 'خطا در آپلود تصویر: ' + error.message })
-    }
+  const handleImageUpload = async (imageUrl) => {
+    setFormData(prev => ({ ...prev, image_url: imageUrl }))
+    setAlert({ type: 'success', message: 'تصویر با موفقیت آپلود شد' })
   }
 
   const handleViewImage = (imageUrl) => {
@@ -179,9 +168,26 @@ const DrugManagement = () => {
     setImageViewerOpen(true)
   }
 
-  const getWarehouseName = (warehouseId) => {
-    const warehouse = warehouses.find(w => w.id === warehouseId)
-    return warehouse ? warehouse.name : '-'
+  const filteredDrugs = useMemo(() => {
+    return [...drugs]
+      .filter(d => !search || d.name.toLowerCase().includes(search.toLowerCase()))
+      .sort((a,b)=> (a.expire_date || '').localeCompare(b.expire_date || ''))
+  }, [drugs, search])
+
+  const daysToExpire = (dateStr) => {
+    if(!dateStr) return null
+    const t = new Date(dateStr)
+    const today = new Date()
+    return Math.floor((t - today)/(1000*60*60*24))
+  }
+
+  const expiryStatus = (drug) => {
+    const d = daysToExpire(drug.expire_date)
+    if (d === null) return '-'
+    if (d < 0) return <Box component="span" sx={{color:'error.main', fontWeight:600}}>منقضی</Box>
+    if (d <= 30) return <Box component="span" sx={{color:'error.main', fontWeight:600}}>{d} روز (خطر)</Box>
+    if (d <= 90) return <Box component="span" sx={{color:'warning.main', fontWeight:600}}>{d} روز</Box>
+    return <Box component="span" sx={{color:'success.main'}}>{d} روز</Box>
   }
 
   return (
@@ -194,9 +200,15 @@ const DrugManagement = () => {
           variant="contained"
           startIcon={<AddIcon />}
           onClick={() => {
+            const off = guardOffline('در حالت آفلاین امکان افزودن دارو نیست')
+            if (off.blocked) {
+              setAlert({ type: 'warning', message: off.message })
+              return
+            }
             resetForm()
             setOpen(true)
           }}
+          disabled={isOffline()}
         >
           افزودن دارو جدید
         </Button>
@@ -208,33 +220,37 @@ const DrugManagement = () => {
         </Alert>
       )}
 
+      <Box mb={2}>
+        <TextField
+          placeholder="جستجوی نام دارو..."
+          size="small"
+          fullWidth
+            value={search}
+            onChange={e=>setSearch(e.target.value)}
+        />
+      </Box>
       <TableContainer>
         <Table>
           <TableHead>
             <TableRow>
               <TableCell>نام دارو</TableCell>
-              <TableCell>دسته‌بندی</TableCell>
-              <TableCell>قیمت</TableCell>
-              <TableCell>انبار</TableCell>
-              <TableCell>موجودی</TableCell>
+              <TableCell>توضیحات</TableCell>
               <TableCell>تاریخ انقضا</TableCell>
+              <TableCell>نوع بسته‌بندی</TableCell>
               <TableCell>تصویر</TableCell>
               <TableCell>عملیات</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {drugs.map((drug) => (
+            {filteredDrugs.map((drug) => (
               <TableRow key={drug.id}>
                 <TableCell>{drug.name}</TableCell>
+                <TableCell>{drug.description || '-'}</TableCell>
                 <TableCell>
-                  <Chip label={drug.category} size="small" />
+                  {drug.expire_date ? formatDMY(drug.expire_date) : '-'}
+                  <br />{expiryStatus(drug)}
                 </TableCell>
-                <TableCell>{drug.price?.toLocaleString()} تومان</TableCell>
-                <TableCell>{getWarehouseName(drug.warehouse_id)}</TableCell>
-                <TableCell>{drug.quantity}</TableCell>
-                <TableCell>
-                  {drug.expiry_date ? new Date(drug.expiry_date).toLocaleDateString('fa-IR') : '-'}
-                </TableCell>
+                <TableCell>{drug.package_type || '-'}</TableCell>
                 <TableCell>
                   {drug.image_url ? (
                     <Box
@@ -243,41 +259,28 @@ const DrugManagement = () => {
                         display: 'inline-block',
                         cursor: 'pointer'
                       }}
-                      onClick={() => handleViewImage(getImageUrl(drug.image_url))}
+                      onClick={() => handleViewImage(drug.image_url)}
                     >
                       <img
-                        src={getImageUrl(drug.image_url)}
+                        src={drug.image_url}
                         alt={drug.name}
                         style={{
-                          width: '40px',
-                          height: '40px',
+                          width: '50px',
+                          height: '50px',
                           objectFit: 'cover',
-                          borderRadius: '4px',
-                          border: '1px solid #ddd',
-                          transition: 'transform 0.2s ease-in-out'
+                          borderRadius: '8px',
+                          transition: 'transform 0.2s ease'
                         }}
                         onMouseEnter={(e) => {
-                          e.target.style.transform = 'scale(2.5)'
-                          e.target.style.zIndex = '1000'
-                          e.target.style.position = 'relative'
-                          e.target.style.boxShadow = '0 4px 8px rgba(0,0,0,0.3)'
+                          e.target.style.transform = 'scale(1.1)'
                         }}
                         onMouseLeave={(e) => {
                           e.target.style.transform = 'scale(1)'
-                          e.target.style.zIndex = 'auto'
-                          e.target.style.position = 'static'
-                          e.target.style.boxShadow = 'none'
                         }}
                       />
                     </Box>
                   ) : (
-                    <IconButton
-                      onClick={() => handleViewImage(null)}
-                      size="small"
-                      disabled
-                    >
-                      <ImageIcon color="disabled" />
-                    </IconButton>
+                    <ImageIcon color="disabled" />
                   )}
                 </TableCell>
                 <TableCell>
@@ -290,9 +293,9 @@ const DrugManagement = () => {
                 </TableCell>
               </TableRow>
             ))}
-            {drugs.length === 0 && (
+            {filteredDrugs.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} align="center">
+                <TableCell colSpan={6} align="center">
                   هیچ دارویی یافت نشد
                 </TableCell>
               </TableRow>
@@ -301,31 +304,22 @@ const DrugManagement = () => {
         </Table>
       </TableContainer>
 
-      {/* Dialog برای افزودن/ویرایش دارو */}
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle>
           {editingDrug ? 'ویرایش دارو' : 'افزودن دارو جدید'}
         </DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 1 }}>
-            <Grid item xs={12} md={6}>
+            <Grid item xs={12}>
               <TextField
                 fullWidth
-                label="نام دارو"
+                label="نام دارو *"
                 value={formData.name}
                 onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                 required
               />
             </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="دسته‌بندی"
-                value={formData.category}
-                onChange={(e) => setFormData(prev => ({ ...prev, category: e.target.value }))}
-                required
-              />
-            </Grid>
+            
             <Grid item xs={12}>
               <TextField
                 fullWidth
@@ -334,77 +328,63 @@ const DrugManagement = () => {
                 onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                 multiline
                 rows={3}
+                placeholder="توضیحات کامل در مورد دارو..."
               />
             </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="قیمت (تومان)"
-                type="number"
-                value={formData.price}
-                onChange={(e) => setFormData(prev => ({ ...prev, price: e.target.value }))}
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <FormControl fullWidth>
-                <InputLabel>انبار</InputLabel>
-                <Select
-                  value={formData.warehouse_id}
-                  onChange={(e) => setFormData(prev => ({ ...prev, warehouse_id: e.target.value }))}
-                  label="انبار"
-                >
-                  {warehouses.map((warehouse) => (
-                    <MenuItem key={warehouse.id} value={warehouse.id}>
-                      {warehouse.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="موجودی"
-                type="number"
-                value={formData.quantity}
-                onChange={(e) => setFormData(prev => ({ ...prev, quantity: e.target.value }))}
-              />
-            </Grid>
+
             <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
                 label="تاریخ انقضا"
                 type="date"
-                value={formData.expiry_date}
-                onChange={(e) => setFormData(prev => ({ ...prev, expiry_date: e.target.value }))}
+                value={formData.expire_date}
+                onChange={(e) => setFormData(prev => ({ ...prev, expire_date: e.target.value }))}
                 InputLabelProps={{ shrink: true }}
+                helperText="تاریخ انقضای دارو"
               />
             </Grid>
+
+            <Grid item xs={12} md={6}>
+              <FormControl fullWidth>
+                <InputLabel>نوع بسته‌بندی</InputLabel>
+                <Select
+                  value={formData.package_type}
+                  onChange={(e) => setFormData(prev => ({ ...prev, package_type: e.target.value }))}
+                  label="نوع بسته‌بندی"
+                >
+                  {packageTypes.map((type) => (
+                    <MenuItem key={type} value={type}>
+                      {type}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            
             <Grid item xs={12}>
               <Typography variant="subtitle1" sx={{ mb: 1 }}>
                 تصویر دارو
               </Typography>
               <ImageUpload
-                onUpload={handleImageUpload}
-                currentImage={formData.image_url ? getImageUrl(formData.image_url) : null}
+                onChange={handleImageUpload}
+                value={formData.image_url}
+                bucket="drug-images"
               />
             </Grid>
           </Grid>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>انصراف</Button>
-          <Button onClick={handleSubmit} variant="contained" disabled={loading}>
+          <Button onClick={handleSubmit} variant="contained" disabled={loading || isOffline()}>
             {loading ? 'در حال ذخیره...' : (editingDrug ? 'ویرایش' : 'افزودن')}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Image Viewer */}
       <ImageViewer
         open={imageViewerOpen}
-        imageUrl={currentImage}
+        src={currentImage}
         onClose={() => setImageViewerOpen(false)}
-        title="تصویر دارو"
       />
     </Paper>
   )

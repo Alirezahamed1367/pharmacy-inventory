@@ -16,6 +16,7 @@ import {
 } from '@mui/icons-material'
 import { uploadImage } from '../services/supabase'
 import ImageViewer from './ImageViewer'
+import { guardOffline, buildUserError } from '../utils/errorUtils'
 
 /**
  * کامپوننت آپلود تصویر با پیش‌نمایش
@@ -25,12 +26,16 @@ const ImageUpload = ({
   onChange, 
   label = "آپلود تصویر",
   accept = "image/*",
-  maxSize = 5, // MB
-  bucket = "drug-images"
+  maxSize = 5, // MB (raw file max before compression attempt)
+  bucket = "drug-images",
+  targetMaxKB = 300, // هدف نهایی حجم پس از فشرده‌سازی
+  maxWidth = 800,
+  maxHeight = 800
 }) => {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState(null)
   const [progress, setProgress] = useState(0)
+  const [info, setInfo] = useState(null)
   const fileInputRef = useRef(null)
 
   const validateFile = (file) => {
@@ -48,30 +53,104 @@ const ImageUpload = ({
     return true
   }
 
+  // فشرده‌سازی تصویر (تبدیل به WebP) با کنترل کیفیت تا رسیدن به حجم هدف
+  const compressImage = async (file) => {
+    // در صورت GIF متحرک یا فرمت غیر قابل پردازش، بدون تغییر برگردان
+    if (file.type === 'image/gif') return file
+
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas')
+          let { width, height } = img
+
+          // مقیاس‌کردن در صورت بزرگ‌تر بودن از حد مجاز
+          const scale = Math.min(1, maxWidth / width, maxHeight / height)
+          if (scale < 1) {
+            width = Math.floor(width * scale)
+            height = Math.floor(height * scale)
+          }
+
+            canvas.width = width
+            canvas.height = height
+          const ctx = canvas.getContext('2d')
+          ctx.drawImage(img, 0, 0, width, height)
+
+          let quality = 0.85
+          const mime = 'image/webp'
+          let blob = canvas.toDataURL(mime, quality)
+
+          // تکرار کاهش کیفیت تا رسیدن به حجم هدف یا حداقل کیفیت
+          const dataURLToBlob = (dataUrl) => {
+            const arr = dataUrl.split(',')
+            const mimeMatch = arr[0].match(/:(.*?);/)
+            const mimeType = mimeMatch ? mimeMatch[1] : 'image/webp'
+            const bstr = atob(arr[1])
+            let n = bstr.length
+            const u8arr = new Uint8Array(n)
+            while (n--) {
+              u8arr[n] = bstr.charCodeAt(n)
+            }
+            return new Blob([u8arr], { type: mimeType })
+          }
+
+          let blobObj = dataURLToBlob(blob)
+          while ((blobObj.size / 1024) > targetMaxKB && quality > 0.4) {
+            quality -= 0.1
+            blob = canvas.toDataURL(mime, quality)
+            blobObj = dataURLToBlob(blob)
+          }
+
+          // ساخت File جدید برای حفظ نام با پسوند webp
+            const newFileName = file.name.replace(/\.[^.]+$/, '') + '.webp'
+          const compressedFile = new File([blobObj], newFileName, { type: 'image/webp' })
+          resolve({ compressedFile, originalSize: file.size, finalSize: compressedFile.size, scaled: scale < 1 })
+        } catch (e) {
+          reject(e)
+        }
+      }
+      img.onerror = () => reject(new Error('عدم امکان خواندن تصویر'))
+      img.src = URL.createObjectURL(file)
+    })
+  }
+
   const handleFileSelect = async (event) => {
+    const offline = guardOffline('در حالت آفلاین امکان آپلود تصویر نیست')
+    if (offline.blocked) {
+      setError(offline.message)
+      event.target.value = ''
+      return
+    }
     const file = event.target.files[0]
     if (!file) return
 
     try {
       validateFile(file)
       setError(null)
+      setInfo(null)
       setUploading(true)
       setProgress(0)
 
-      // شبیه‌سازی پیشرفت آپلود
+      // شبیه‌سازی پیشرفت اولیه (پردازش + آپلود)
       const progressInterval = setInterval(() => {
         setProgress(prev => {
-          if (prev >= 90) {
+          if (prev >= 80) {
             clearInterval(progressInterval)
-            return 90
+            return 80
           }
-          return prev + 10
+          return prev + 8
         })
-      }, 200)
+      }, 180)
 
-      // آپلود فایل
-      const result = await uploadImage(file, bucket)
-      
+      // فشرده‌سازی
+      const { compressedFile, originalSize, finalSize, scaled } = await compressImage(file)
+
+      // ادامه نوار پیشرفت تا قبل از پایان
+      setProgress(90)
+
+      const result = await uploadImage(compressedFile, bucket)
+
       clearInterval(progressInterval)
       setProgress(100)
 
@@ -79,19 +158,21 @@ const ImageUpload = ({
         throw new Error(result.error.message)
       }
 
-      // ارسال URL به کامپوننت والد
       onChange(result.data.url)
-      
-      setTimeout(() => {
-        setProgress(0)
-      }, 1000)
 
+      setInfo({
+        originalKB: (originalSize / 1024).toFixed(1),
+        finalKB: (finalSize / 1024).toFixed(1),
+        scaled,
+        ratio: ((finalSize / originalSize) * 100).toFixed(0)
+      })
+
+      setTimeout(() => setProgress(0), 1200)
     } catch (err) {
-      setError(err.message)
+      setError(buildUserError(err))
       setProgress(0)
     } finally {
       setUploading(false)
-      // پاک کردن input برای امکان انتخاب مجدد همان فایل
       event.target.value = ''
     }
   }
@@ -201,10 +282,17 @@ const ImageUpload = ({
         </Box>
       )}
 
-      {/* نمایش خطا */}
+      {/* نمایش پیام‌ها */}
       {error && (
         <Alert severity="error" sx={{ mt: 2 }}>
           {error}
+        </Alert>
+      )}
+      {!error && info && (
+        <Alert severity="success" sx={{ mt: 2, direction: 'ltr' }}>
+          <Typography variant="body2" component="div">
+            Optimized: {info.originalKB}KB → {info.finalKB}KB ({info.ratio}%) {info.scaled ? ' | resized' : ''}
+          </Typography>
         </Alert>
       )}
 

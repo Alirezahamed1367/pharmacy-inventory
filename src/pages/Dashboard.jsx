@@ -26,7 +26,8 @@ import {
   Inventory as InventoryIcon,
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../services/supabase'
+import { supabase, getInventoryDetailed, isBackendAvailable } from '../services/supabase'
+import Skeleton from '@mui/material/Skeleton'
 import dayjs from 'dayjs'
 import 'dayjs/locale/fa'
 
@@ -43,59 +44,63 @@ export default function Dashboard() {
   const navigate = useNavigate()
 
   useEffect(() => {
+    if (!isBackendAvailable()) {
+      // داده نمایشی برای حالت آفلاین
+      setData({
+        stats: { totalDrugs: 0, totalWarehouses: 0, expiringSoon: 0, expired: 0 },
+        recentActivities: [],
+        expiringDrugs: []
+      })
+      setError(null)
+      setLoading(false)
+      return
+    }
     fetchDashboardData()
   }, [])
 
   const fetchDashboardData = async () => {
     setLoading(true)
     try {
-      // دریافت تعداد کل داروها
+      // تعداد کل داروها (هر واریانت یک ردیف)
       const { data: drugsData, error: drugsError } = await supabase
         .from('drugs')
         .select('id')
-        .eq('active', true)
-
       if (drugsError) throw drugsError
 
-      // دریافت تعداد کل انبارها
+      // تعداد کل انبارها
       const { data: warehousesData, error: warehousesError } = await supabase
         .from('warehouses')
         .select('id')
-        .eq('active', true)
-
       if (warehousesError) throw warehousesError
 
-      // دریافت داروهای در حال انقضا از view
-      const { data: inventoryData, error: inventoryError } = await supabase
-        .from('inventory_view')
-        .select('*')
+      // موجودی تفصیلی جهت محاسبه وضعیت انقضا
+      const inventoryDetailed = await getInventoryDetailed()
+      if (inventoryDetailed.error) throw new Error(inventoryDetailed.error.message)
+      const today = new Date()
+      const classified = inventoryDetailed.data.map(row => {
+        const expire = row.drug?.expire_date ? new Date(row.drug.expire_date) : null
+        let diffDays = null
+        let status = 'unknown'
+        if (expire) {
+          diffDays = Math.ceil((expire - today) / 86400000)
+          if (diffDays < 0) status = 'expired'
+          else if (diffDays <= 30) status = 'soon'
+          else if (diffDays <= 90) status = 'mid'
+          else status = 'healthy'
+        }
+        return { ...row, diffDays, status, drug_name: row.drug?.name }
+      })
+      const expiringSoon = classified.filter(r => r.status === 'soon')
+      const expired = classified.filter(r => r.status === 'expired')
 
-      if (inventoryError) throw inventoryError
-
-      // محاسبه داروهای منقضی و در حال انقضا
-      const currentDate = new Date()
-      const expiringSoon = inventoryData?.filter(item => {
-        if (!item.expiry_date) return false
-        const expiryDate = new Date(item.expiry_date)
-        const diffTime = expiryDate - currentDate
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-        return diffDays > 0 && diffDays <= 30
-      }) || []
-
-      const expired = inventoryData?.filter(item => {
-        if (!item.expiry_date) return false
-        const expiryDate = new Date(item.expiry_date)
-        return expiryDate < currentDate
-      }) || []
-
-      // دریافت فعالیت‌های اخیر
-      const { data: movementsData, error: movementsError } = await supabase
-        .from('movements_view')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(5)
-
-      if (movementsError) throw movementsError
+      // فعلاً فعالیت‌های اخیر: 5 آخرین رسید یا حواله (ساده‌سازی)
+      const recent = []
+      const { data: lastReceipts } = await supabase.from('receipts').select('id, created_at, status').order('created_at', { ascending: false }).limit(3)
+      const { data: lastTransfers } = await supabase.from('transfers').select('id, created_at, status').order('created_at', { ascending: false }).limit(3)
+      if (lastReceipts) lastReceipts.forEach(r => recent.push({ type: 'receipt', ...r }))
+      if (lastTransfers) lastTransfers.forEach(t => recent.push({ type: 'transfer', ...t }))
+      recent.sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
+      const recentActivities = recent.slice(0,5)
 
       setData({
         stats: {
@@ -104,8 +109,8 @@ export default function Dashboard() {
           expiringSoon: expiringSoon.length,
           expired: expired.length
         },
-        recentActivities: movementsData || [],
-        expiringDrugs: expiringSoon.slice(0, 5) // نمایش 5 مورد اول
+        recentActivities,
+        expiringDrugs: expiringSoon.slice(0,5)
       })
 
       setError(null)
@@ -205,9 +210,9 @@ export default function Dashboard() {
   }
 
   return (
-    <Box>
+    <Box sx={{ pt: 1 }}>
       {/* Header */}
-      <Box sx={{ mb: 4 }}>
+      <Box sx={{ mb: 3 }}>
         <Typography variant="h4" component="h1" fontWeight="bold" gutterBottom>
           داشبورد مدیریت
         </Typography>
@@ -225,7 +230,19 @@ export default function Dashboard() {
 
       {/* Loading */}
       {loading && (
-        <LinearProgress sx={{ mb: 3 }} />
+        <Box sx={{ mb: 4 }}>
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            {Array.from({ length:4 }).map((_,i) => (
+              <Grid item xs={12} sm={6} md={3} key={i}>
+                <Skeleton variant="rounded" height={120} />
+              </Grid>
+            ))}
+          </Grid>
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}><Skeleton variant="rounded" height={400} /></Grid>
+            <Grid item xs={12} md={6}><Skeleton variant="rounded" height={400} /></Grid>
+          </Grid>
+        </Box>
       )}
 
       {/* Stats Cards */}
@@ -277,7 +294,7 @@ export default function Dashboard() {
                 {data.recentActivities.length === 0 ? (
                   <Typography variant="body2" color="text.secondary">فعالیتی ثبت نشده است.</Typography>
                 ) : (
-                  data.recentActivities.map((activity, index) => (
+                  data.recentActivities.map((activity) => (
                     <ListItem key={activity.id} alignItems="flex-start">
                       <ListItemIcon>
                         {getActivityIcon(activity.type)}

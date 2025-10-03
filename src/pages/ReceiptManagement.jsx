@@ -1,337 +1,172 @@
-import React, { useState, useEffect } from 'react'
-import {
-  Box,
-  Typography,
-  Card,
-  CardContent,
-  Button,
-  Grid,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Chip,
-  IconButton,
-  Avatar,
-  Alert,
-} from '@mui/material'
-import {
-  Add as AddIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  Inventory as InventoryIcon,
-  LocalShipping as ShippingIcon,
-  CheckCircle as CheckIcon,
-  Pending as PendingIcon,
-} from '@mui/icons-material'
-import ReceiptConfirmationDialog from '../components/ReceiptConfirmationDialog'
-import TransferDialog from '../components/TransferDialog'
+import React, { useEffect, useState } from 'react'
+import { Box, Typography, Card, CardContent, Button, Grid, Alert, Chip, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField } from '@mui/material'
+import { Add as AddIcon, Check as CheckIcon, Delete as DeleteIcon, Inventory as InventoryIcon, HourglassEmpty as PendingIcon } from '@mui/icons-material'
+import { getReceipts, createReceipt, completeReceipt, getReceiptItems, getDrugs, getAllWarehouses } from '../services/supabase'
 import { supabase } from '../services/supabase'
-import { DrugSelect, SupplierSelect, WarehouseSelect, UnitSelect } from '../components/DropdownSelects'
+import { formatDMY } from '../utils/dateUtils'
 
 const ReceiptManagement = () => {
   const [receipts, setReceipts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [openTransferDialog, setOpenTransferDialog] = useState(false)
-  const [openConfirmDialog, setOpenConfirmDialog] = useState(false)
-  const [selectedReceipt, setSelectedReceipt] = useState(null)
-  const [editingReceipt, setEditingReceipt] = useState(null)
+  const [openNew, setOpenNew] = useState(false)
+  const [openItems, setOpenItems] = useState(false)
+  const [currentReceipt, setCurrentReceipt] = useState(null)
   const [drugs, setDrugs] = useState([])
   const [warehouses, setWarehouses] = useState([])
+  const [form, setForm] = useState({ destination_warehouse_id: '', supplier_id: '', notes: '', document_date: new Date().toISOString().slice(0,10) })
   const [suppliers, setSuppliers] = useState([])
-  const [formLoading, setFormLoading] = useState(false)
-  const [formError, setFormError] = useState(null)
+  const [items, setItems] = useState([]) // temp items before create
+  const [newItem, setNewItem] = useState({ drug_id: '', quantity: '', batch_number: '', supplier_id: '' })
+  const [creating, setCreating] = useState(false)
+  const [completing, setCompleting] = useState(false)
 
-  // دریافت داده‌های اولیه
-  useEffect(() => {
-    fetchAll()
-  }, [])
+  useEffect(() => { loadData() }, [])
 
-  const fetchAll = async () => {
+  const loadData = async () => {
     setLoading(true)
     setError(null)
     try {
-      // دریافت رسیدها
-      const { data: receiptsData, error: receiptsError } = await supabase
-        .from('movements_view')
-        .select('*')
-        .eq('movement_type', 'entry')
-        .order('movement_date', { ascending: false })
-      if (receiptsError) throw receiptsError
-      setReceipts(receiptsData || [])
-
-      // دریافت داروها
-      const { data: drugsData, error: drugsError } = await supabase
-        .from('drugs')
-        .select('*')
-        .eq('active', true)
-        .order('name')
-      if (drugsError) throw drugsError
-      setDrugs(drugsData || [])
-
-      // دریافت انبارها
-      const { data: warehousesData, error: warehousesError } = await supabase
-        .from('warehouses')
-        .select('*')
-        .eq('active', true)
-        .order('name')
-      if (warehousesError) throw warehousesError
-      setWarehouses(warehousesData || [])
-
-      // دریافت تامین‌کنندگان (از جدول system_settings یا یک جدول suppliers)
-      const { data: suppliersData, error: suppliersError } = await supabase
-        .from('system_settings')
-        .select('*')
-        .eq('setting_key', 'suppliers')
-      if (suppliersError) throw suppliersError
-      let suppliersList = []
-      if (suppliersData && suppliersData.length > 0) {
-        try {
-          suppliersList = JSON.parse(suppliersData[0].setting_value)
-        } catch {}
-      }
-      setSuppliers(suppliersList)
-    } catch (err) {
-      setError(err.message || 'خطا در دریافت داده‌ها')
+      const [rRes, dRes, wRes, sRes] = await Promise.all([
+        getReceipts(),
+        getDrugs(),
+        getAllWarehouses(),
+        supabase ? supabase.from('suppliers').select('id,name') : Promise.resolve({ data: [], error: null })
+      ])
+      if (rRes.error) throw new Error(rRes.error.message)
+      if (dRes.error) throw new Error(dRes.error.message)
+      if (wRes.error) throw new Error(wRes.error.message)
+      if (sRes.error) throw new Error(sRes.error.message)
+      setReceipts(rRes.data)
+      setDrugs(dRes.data)
+      setWarehouses(wRes.data)
+      setSuppliers(sRes.data || [])
+    } catch (e) {
+      setError(e.message)
     } finally {
       setLoading(false)
     }
   }
 
-  // باز کردن دیالوگ افزودن/ویرایش
-  const handleOpenDialog = (receipt = null) => {
-    setEditingReceipt(receipt)
-    setOpenTransferDialog(true)
+  const resetForm = () => {
+    setForm({ destination_warehouse_id: '', supplier_id: '', notes: '', document_date: new Date().toISOString().slice(0,10) })
+    setItems([])
+    setNewItem({ drug_id: '', quantity: '', batch_number: '', supplier_id: '' })
   }
 
-  // بستن دیالوگ
-  const handleCloseDialog = () => {
-    setOpenTransferDialog(false)
-    setEditingReceipt(null)
-    setFormError(null)
-  }
-
-  // تأیید رسید
-  const handleConfirmReceiptSubmit = () => {
-    setOpenConfirmDialog(false)
-    fetchAll() // بروزرسانی لیست
-  }
-
-  // افزودن یا ویرایش رسید
-  const handleSaveReceipt = async (receiptData) => {
-    setFormLoading(true)
-    setFormError(null)
+  const handleCreateReceipt = async () => {
+    if (!form.destination_warehouse_id || items.length === 0) {
+      setError('انبار مقصد و حداقل یک آیتم الزامی است')
+      return
+    }
+    setCreating(true)
     try {
-      let result
-      if (editingReceipt) {
-        // ویرایش
-        result = await supabase
-          .from('drug_movements')
-          .update({
-            ...receiptData,
-            movement_type: 'entry',
-          })
-          .eq('id', editingReceipt.id)
-        if (result.error) throw result.error
-      } else {
-        // افزودن
-        result = await supabase
-          .from('drug_movements')
-          .insert([{ ...receiptData, movement_type: 'entry' }])
-        if (result.error) throw result.error
+      const payload = {
+        destination_warehouse_id: form.destination_warehouse_id,
+        supplier_id: form.supplier_id || null,
+        notes: form.notes || null,
+        document_date: form.document_date,
+        items: items.map(i => ({ drug_id: i.drug_id, quantity: Number(i.quantity), batch_number: i.batch_number || null, supplier_id: i.supplier_id || null }))
       }
-      handleCloseDialog()
-      fetchAll()
-    } catch (err) {
-      setFormError(err.message || 'خطا در ذخیره رسید')
+      const { error: cErr } = await createReceipt(payload)
+      if (cErr) throw new Error(cErr.message)
+      setOpenNew(false)
+      resetForm()
+      loadData()
+    } catch (e) {
+      setError(e.message)
     } finally {
-      setFormLoading(false)
+      setCreating(false)
     }
   }
 
-  // حذف یا لغو رسید
-  const handleDeleteReceipt = async (receiptId) => {
-    if (!window.confirm('آیا از حذف این رسید مطمئن هستید؟')) return
-    setFormLoading(true)
-    setFormError(null)
+  const handleComplete = async (receipt) => {
+    if (!window.confirm('آیا از تکمیل این رسید مطمئن هستید؟')) return
+    setCompleting(true)
     try {
-      const { error } = await supabase
-        .from('drug_movements')
-        .delete()
-        .eq('id', receiptId)
-      if (error) throw error
-      fetchAll()
-    } catch (err) {
-      setFormError(err.message || 'خطا در حذف رسید')
+      const { error: compErr } = await completeReceipt(receipt.id)
+      if (compErr) throw new Error(compErr.message)
+      loadData()
+    } catch (e) {
+      setError(e.message)
     } finally {
-      setFormLoading(false)
+      setCompleting(false)
     }
   }
 
-  // تایید رسید (مثلاً تغییر وضعیت)
-  const handleConfirmReceipt = async (receiptId) => {
-    setFormLoading(true)
-    setFormError(null)
-    try {
-      const { error } = await supabase
-        .from('drug_movements')
-        .update({ status: 'received' })
-        .eq('id', receiptId)
-      if (error) throw error
-      fetchAll()
-    } catch (err) {
-      setFormError(err.message || 'خطا در تایید رسید')
-    } finally {
-      setFormLoading(false)
-    }
+  const openItemsDialog = async (receipt) => {
+    setCurrentReceipt(receipt)
+    setOpenItems(true)
+    const { data, error: itErr } = await getReceiptItems(receipt.id)
+    if (!itErr) setItems(data)
   }
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'received': return 'success'
-      case 'partial_received': return 'warning'
-      case 'in_transit': return 'info'
-      case 'pending': return 'default'
-      default: return 'default'
-    }
+  const addTempItem = () => {
+    if (!newItem.drug_id || !newItem.quantity) return
+    setItems(prev => [...prev, newItem])
+    setNewItem({ drug_id: '', quantity: '', batch_number: '', supplier_id: '' })
   }
 
-  const getStatusText = (status) => {
-    switch (status) {
-      case 'received': return 'دریافت شده'
-      case 'partial_received': return 'دریافت ناقص'
-      case 'in_transit': return 'در راه'
-      case 'pending': return 'در انتظار'
-      default: return 'نامشخص'
-    }
+  const removeTempItem = (idx) => {
+    setItems(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  const statusChip = (status) => {
+    const map = { pending: { label: 'در انتظار', color: 'warning' }, completed: { label: 'تکمیل', color: 'success' } }
+    const cfg = map[status] || { label: status, color: 'default' }
+    return <Chip size='small' color={cfg.color} label={cfg.label} />
   }
 
   return (
     <Box>
-      {/* Header */}
       <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Box>
-          <Typography variant="h4" component="h1" fontWeight="bold" gutterBottom>
-            مدیریت رسید کالا
-          </Typography>
-          <Typography variant="subtitle1" color="text.secondary">
-            ثبت و مدیریت رسیدهای دریافت کالا از تامین‌کنندگان
-          </Typography>
+          <Typography variant='h4' fontWeight='bold'>رسیدها</Typography>
+          <Typography variant='subtitle1' color='text.secondary'>مدیریت و ثبت رسیدهای ورود کالا</Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpenDialog()}
-          size="large"
-        >
-          رسید جدید
-        </Button>
+        <Button variant='contained' startIcon={<AddIcon />} onClick={() => { resetForm(); setOpenNew(true) }}>رسید جدید</Button>
       </Box>
 
-  {/* وضعیت بارگذاری و خطا */}
-  {loading && <Alert severity="info">در حال بارگذاری رسیدها...</Alert>}
-  {error && <Alert severity="error">{error}</Alert>}
+      {loading && <Alert severity='info'>در حال بارگذاری...</Alert>}
+      {error && <Alert severity='error' sx={{ mb:2 }}>{error}</Alert>}
 
-  {/* Summary Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} md={3}>
-          <Card sx={{ bgcolor: 'success.light', color: 'success.contrastText' }}>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <CheckIcon sx={{ fontSize: 40, mb: 1 }} />
-              <Typography variant="h4" fontWeight="bold">
-                {receipts.filter(r => r.status === 'received').length}
-              </Typography>
-              <Typography variant="subtitle1">دریافت شده</Typography>
-            </CardContent>
-          </Card>
+          <Card><CardContent sx={{ textAlign:'center' }}><CheckIcon color='success' sx={{ fontSize:36 }}/><Typography variant='h5'>{receipts.filter(r=>r.status==='completed').length}</Typography><Typography variant='body2'>تکمیل شده</Typography></CardContent></Card>
         </Grid>
         <Grid item xs={12} md={3}>
-          <Card sx={{ bgcolor: 'warning.light', color: 'warning.contrastText' }}>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <ShippingIcon sx={{ fontSize: 40, mb: 1 }} />
-              <Typography variant="h4" fontWeight="bold">
-                {receipts.filter(r => r.status === 'in_transit').length}
-              </Typography>
-              <Typography variant="subtitle1">در راه</Typography>
-            </CardContent>
-          </Card>
+          <Card><CardContent sx={{ textAlign:'center' }}><PendingIcon color='warning' sx={{ fontSize:36 }}/><Typography variant='h5'>{receipts.filter(r=>r.status==='pending').length}</Typography><Typography variant='body2'>در انتظار</Typography></CardContent></Card>
         </Grid>
         <Grid item xs={12} md={3}>
-          <Card sx={{ bgcolor: 'info.light', color: 'info.contrastText' }}>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <PendingIcon sx={{ fontSize: 40, mb: 1 }} />
-              <Typography variant="h4" fontWeight="bold">
-                {receipts.filter(r => r.status === 'pending').length}
-              </Typography>
-              <Typography variant="subtitle1">در انتظار</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={3}>
-          <Card sx={{ bgcolor: 'primary.light', color: 'primary.contrastText' }}>
-            <CardContent sx={{ textAlign: 'center' }}>
-              <InventoryIcon sx={{ fontSize: 40, mb: 1 }} />
-              <Typography variant="h4" fontWeight="bold">
-                {receipts.length}
-              </Typography>
-              <Typography variant="subtitle1">کل رسیدها</Typography>
-            </CardContent>
-          </Card>
+          <Card><CardContent sx={{ textAlign:'center' }}><InventoryIcon color='primary' sx={{ fontSize:36 }}/><Typography variant='h5'>{receipts.length}</Typography><Typography variant='body2'>کل</Typography></CardContent></Card>
         </Grid>
       </Grid>
 
-      {/* Receipts Table */}
       <Card>
         <CardContent>
-          <Typography variant="h6" component="h2" gutterBottom fontWeight="bold">
-            لیست رسیدها ({receipts.length})
-          </Typography>
-          {formError && <Alert severity="error">{formError}</Alert>}
-          <TableContainer component={Paper} sx={{ mt: 2 }}>
-            <Table>
+          <Typography variant='h6' fontWeight='bold'>لیست رسیدها ({receipts.length})</Typography>
+          <TableContainer component={Paper} sx={{ mt:2 }}>
+            <Table size='small'>
               <TableHead>
                 <TableRow>
-                  <TableCell>شماره رسید</TableCell>
-                  <TableCell>تامین‌کننده</TableCell>
-                  <TableCell>تاریخ</TableCell>
-                  <TableCell>انبار</TableCell>
+                  <TableCell>کد</TableCell>
+                  <TableCell>انبار مقصد</TableCell>
                   <TableCell>وضعیت</TableCell>
-                  <TableCell align="center">عملیات</TableCell>
+                  <TableCell>تاریخ ایجاد</TableCell>
+                  <TableCell align='center'>عملیات</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {receipts.map((receipt) => (
-                  <TableRow key={receipt.id}>
-                    <TableCell>
-                      <Typography variant="subtitle2" fontWeight="bold">
-                        {receipt.reference_number || receipt.id}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>{receipt.supplier_name || receipt.supplier || 'نامشخص'}</TableCell>
-                    <TableCell>{receipt.movement_date ? new Date(receipt.movement_date).toLocaleDateString('fa-IR') : ''}</TableCell>
-                    <TableCell>{receipt.to_warehouse || receipt.warehouse || 'نامشخص'}</TableCell>
-                    <TableCell>
-                      <Chip
-                        label={getStatusText(receipt.status)}
-                        color={getStatusColor(receipt.status)}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell align="center">
-                      <IconButton size="small" color="primary" onClick={() => handleOpenDialog(receipt)}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton size="small" color="error" onClick={() => handleDeleteReceipt(receipt.id)}>
-                        <DeleteIcon />
-                      </IconButton>
-                      {receipt.status !== 'received' && (
-                        <Button size="small" color="success" variant="outlined" onClick={() => handleConfirmReceipt(receipt.id)} sx={{ ml: 1 }}>
-                          تایید رسید
-                        </Button>
+                {receipts.map(r => (
+                  <TableRow key={r.id} hover>
+                    <TableCell sx={{ fontFamily:'monospace' }}>{r.id.slice(0,8)}</TableCell>
+                    <TableCell>{warehouses.find(w=>w.id===r.destination_warehouse_id)?.name || '---'}</TableCell>
+                    <TableCell>{statusChip(r.status)}</TableCell>
+                    <TableCell>{formatDMY(r.created_at)}</TableCell>
+                    <TableCell align='center'>
+                      <Button size='small' variant='outlined' onClick={()=>openItemsDialog(r)}>آیتم‌ها</Button>
+                      {r.status==='pending' && (
+                        <Button size='small' sx={{ ml:1 }} variant='contained' color='success' disabled={completing} onClick={()=>handleComplete(r)}>تکمیل</Button>
                       )}
                     </TableCell>
                   </TableRow>
@@ -342,32 +177,123 @@ const ReceiptManagement = () => {
         </CardContent>
       </Card>
 
-      {/* Transfer Dialog for Receipt Management */}
-      <TransferDialog
-        open={openTransferDialog}
-        onClose={handleCloseDialog}
-        onSave={handleSaveReceipt}
-        title={editingReceipt ? "ویرایش رسید کالا" : "رسید کالای جدید"}
-        type="receipt"
-        mode={editingReceipt ? "edit" : "add"}
-        initialData={editingReceipt}
-        drugs={drugs}
-        warehouses={warehouses}
-        suppliers={suppliers}
-        loading={formLoading}
-        error={formError}
-      />
+      {/* Dialog: New Receipt */}
+      <Dialog open={openNew} onClose={()=>setOpenNew(false)} maxWidth='md' fullWidth>
+        <DialogTitle>رسید جدید</DialogTitle>
+        <DialogContent dividers>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={4}>
+              <TextField select SelectProps={{ native:true }} label='انبار مقصد' fullWidth value={form.destination_warehouse_id} onChange={e=>setForm(f=>({...f,destination_warehouse_id:e.target.value}))}>
+                <option value=''>انتخاب...</option>
+                {warehouses.map(w=> <option key={w.id} value={w.id}>{w.name}</option> )}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <TextField select SelectProps={{ native:true }} label='تامین‌کننده اصلی (اختیاری)' fullWidth value={form.supplier_id} onChange={e=>setForm(f=>({...f,supplier_id:e.target.value}))}>
+                <option value=''>انتخاب...</option>
+                {suppliers.map(s=> <option key={s.id} value={s.id}>{s.name}</option> )}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <TextField type='date' label='تاریخ سند' InputLabelProps={{ shrink:true }} fullWidth value={form.document_date} onChange={e=>setForm(f=>({...f,document_date:e.target.value}))} />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField label='یادداشت' fullWidth value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} />
+            </Grid>
+            <Grid item xs={12}>
+              <Typography variant='subtitle1' fontWeight='bold' sx={{ mt:1 }}>آیتم‌ها</Typography>
+              <Grid container spacing={1} alignItems='center' sx={{ mt:1 }}>
+                <Grid item xs={12} md={4}>
+                  <TextField select SelectProps={{ native:true }} label='دارو (نام - انقضا)' fullWidth value={newItem.drug_id} onChange={e=>setNewItem(i=>({...i,drug_id:e.target.value}))}>
+                    <option value=''>انتخاب...</option>
+                    {drugs.map(d=> <option key={d.id} value={d.id}>{d.name} - {d.expire_date}</option> )}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} md={2}>
+                  <TextField label='تعداد' type='number' fullWidth value={newItem.quantity} onChange={e=>setNewItem(i=>({...i,quantity:e.target.value}))} />
+                </Grid>
+                <Grid item xs={12} md={2}>
+                  <TextField label='بچ' fullWidth value={newItem.batch_number} onChange={e=>setNewItem(i=>({...i,batch_number:e.target.value}))} />
+                </Grid>
+                <Grid item xs={12} md={3}>
+                  <TextField select SelectProps={{ native:true }} label='تامین‌کننده (اختیاری)' fullWidth value={newItem.supplier_id} onChange={e=>setNewItem(i=>({...i,supplier_id:e.target.value}))}>
+                    <option value=''>انتخاب...</option>
+                    {suppliers.map(s=> <option key={s.id} value={s.id}>{s.name}</option> )}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} md={1}>
+                  <Button onClick={addTempItem} disabled={!newItem.drug_id || !newItem.quantity}>افزودن</Button>
+                </Grid>
+              </Grid>
+              <Table size='small' sx={{ mt:2 }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>دارو</TableCell>
+                    <TableCell>انقضا</TableCell>
+                    <TableCell>تعداد</TableCell>
+                    <TableCell>بچ</TableCell>
+                    <TableCell>تامین‌کننده</TableCell>
+                    <TableCell></TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {items.map((it,idx)=>{
+                    const drug = drugs.find(d=>d.id===it.drug_id)
+                    return (
+                      <TableRow key={idx}>
+                        <TableCell>{drug?.name}</TableCell>
+                        <TableCell>{formatDMY(drug?.expire_date)}</TableCell>
+                        <TableCell>{it.quantity}</TableCell>
+                        <TableCell>{it.batch_number||'-'}</TableCell>
+                        <TableCell>{suppliers.find(s=>s.id===it.supplier_id)?.name || suppliers.find(s=>s.id===form.supplier_id)?.name || '-'}</TableCell>
+                        <TableCell><IconButton color='error' size='small' onClick={()=>removeTempItem(idx)}><DeleteIcon fontSize='small' /></IconButton></TableCell>
+                      </TableRow>
+                    )
+                  })}
+                  {items.length===0 && <TableRow><TableCell colSpan={6} align='center'>آیتمی اضافه نشده است</TableCell></TableRow>}
+                </TableBody>
+              </Table>
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={()=>setOpenNew(false)}>بستن</Button>
+          <Button variant='contained' onClick={handleCreateReceipt} disabled={creating}>ایجاد رسید</Button>
+        </DialogActions>
+      </Dialog>
 
-
-
-      {/* Receipt Confirmation Dialog */}
-      <ReceiptConfirmationDialog
-        open={openConfirmDialog}
-        onClose={() => setOpenConfirmDialog(false)}
-        receipt={selectedReceipt}
-        onConfirm={handleConfirmReceiptSubmit}
-        userRole="warehouse_manager"
-      />
+      {/* Dialog: Receipt Items (view existing) */}
+      <Dialog open={openItems} onClose={()=>{setOpenItems(false); setCurrentReceipt(null);}} maxWidth='md' fullWidth>
+        <DialogTitle>آیتم‌های رسید</DialogTitle>
+        <DialogContent dividers>
+          {currentReceipt && (
+            <Table size='small'>
+              <TableHead>
+                <TableRow>
+                  <TableCell>دارو</TableCell>
+                  <TableCell>انقضا</TableCell>
+                  <TableCell>تعداد</TableCell>
+                  <TableCell>بچ</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {items.map(it => (
+                  <TableRow key={it.id}>
+                    <TableCell>{it.drugs?.name}</TableCell>
+                    <TableCell>{formatDMY(it.drugs?.expire_date)}</TableCell>
+                    <TableCell>{it.quantity}</TableCell>
+                    <TableCell>{it.batch_number || '-'}</TableCell>
+                  </TableRow>
+                ))}
+                {items.length===0 && <TableRow><TableCell colSpan={4} align='center'>آیتمی ثبت نشده</TableCell></TableRow>}
+              </TableBody>
+            </Table>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={()=>{setOpenItems(false); setCurrentReceipt(null);}}>بستن</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   )
 }

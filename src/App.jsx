@@ -14,6 +14,7 @@ import LoginPage from './pages/LoginPage'
 import Dashboard from './pages/Dashboard'
 import DrugManagement from './pages/DrugManagement'
 import ReceiptManagement from './pages/ReceiptManagement'
+import Transfers from './pages/Transfers'
 import WarehouseManagement from './pages/WarehouseManagement'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
@@ -46,22 +47,16 @@ const theme = createTheme({
   },
   typography: {
     fontFamily: 'Vazirmatn, Arial, sans-serif',
-    h1: {
-      fontSize: '2rem',
-      fontWeight: 600,
-    },
-    h2: {
-      fontSize: '1.75rem',
-      fontWeight: 600,
-    },
-    h3: {
-      fontSize: '1.5rem',
-      fontWeight: 600,
-    },
-    body1: {
-      fontSize: '1rem',
-      lineHeight: 1.6,
-    },
+    fontWeightRegular: 400,
+    fontWeightMedium: 500,
+    fontWeightBold: 600,
+    h1: { fontSize: 'clamp(1.9rem, 1.5rem + 1.2vw, 2.4rem)', fontWeight: 700 },
+    h2: { fontSize: 'clamp(1.6rem, 1.3rem + 0.9vw, 2rem)', fontWeight: 600 },
+    h3: { fontSize: 'clamp(1.3rem, 1.1rem + 0.6vw, 1.6rem)', fontWeight: 600 },
+    h4: { fontSize: '1.25rem', fontWeight: 600 },
+    body1: { fontSize: '.95rem', lineHeight: 1.7 },
+    body2: { fontSize: '.83rem', lineHeight: 1.55 },
+    button: { fontWeight: 600 },
   },
   components: {
     MuiButton: {
@@ -69,6 +64,8 @@ const theme = createTheme({
         root: {
           borderRadius: 8,
           textTransform: 'none',
+          fontWeight: 600,
+          letterSpacing: '.3px'
         },
       },
     },
@@ -76,10 +73,20 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: 12,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.06)',
+          transition: 'box-shadow .25s, transform .25s',
+          '&:hover': {
+            boxShadow: '0 4px 18px rgba(0,0,0,0.12)',
+            transform: 'translateY(-2px)'
+          }
         },
       },
     },
+    MuiAlert: {
+      styleOverrides: {
+        root: { direction: 'rtl', fontWeight: 500 }
+      }
+    }
   },
 })
 
@@ -95,7 +102,7 @@ function App() {
       if (savedUser) {
         try {
           setUser(JSON.parse(savedUser))
-        } catch (error) {
+        } catch {
           // در صورت خطا در parsing، localStorage را پاک کن
           localStorage.removeItem('currentUser')
           localStorage.removeItem('userRole')
@@ -164,6 +171,7 @@ function App() {
                     <Route path="/drugs" element={<DrugManagement />} />
                     <Route path="/receipts" element={<ReceiptManagement />} />
                     <Route path="/warehouses" element={<WarehouseManagement />} />
+                    <Route path="/transfers" element={<Transfers />} />
                     <Route path="/reports" element={<Reports />} />
                     <Route path="/settings" element={<Settings />} />
                     <Route path="*" element={<Navigate to="/" replace />} />

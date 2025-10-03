@@ -59,13 +59,13 @@ const ReceiptConfirmationDialog = ({
   useEffect(() => {
     // Calculate discrepancies whenever quantities change
     calculateDiscrepancies();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [receivedQuantities, receipt]);
 
   const calculateDiscrepancies = () => {
     if (!receipt?.items) return;
 
-    const newDiscrepancies = [];
-    let hasDiscrepancy = false;
+  const newDiscrepancies = [];
 
     receipt.items.forEach(item => {
       const sentQty = item.sentQuantity || item.quantity || 0;
@@ -73,7 +73,6 @@ const ReceiptConfirmationDialog = ({
       const difference = receivedQty - sentQty;
 
       if (difference !== 0) {
-        hasDiscrepancy = true;
         newDiscrepancies.push({
           itemId: item.id,
           itemName: item.drugName,

@@ -9,10 +9,8 @@ import {
   Button,
   Grid,
   TextField,
-  Alert,
-  Table,
-  TableBody,
   TableCell,
+    // حذف state های استفاده نشده برای تمیزی کد
   TableContainer,
   TableHead,
   TableRow,
@@ -45,10 +43,7 @@ export default function TransferDialog({
   initialData = null,
   mode = "add", // "add" | "edit"
   drugs = [],
-  warehouses = [],
-  suppliers = [],
-  loading = false,
-  error = null
+  warehouses = []
 }) {
   // حالت اولیه برای انواع مختلف
   const getInitialFormData = () => {

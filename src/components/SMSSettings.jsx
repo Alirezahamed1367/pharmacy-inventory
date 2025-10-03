@@ -55,14 +55,8 @@ const SMSSettings = () => {
   const handleSave = () => {
     localStorage.setItem('smsConfig', JSON.stringify(smsConfig))
     
-    // آپدیت environment variables
-    window.process = { env: {} }
-    process.env.VITE_SMS_API_URL = smsConfig.apiUrl
-    process.env.VITE_SMS_API_KEY = smsConfig.apiKey
-    process.env.VITE_SMS_USERNAME = smsConfig.username
-    process.env.VITE_SMS_PASSWORD = smsConfig.password
-    process.env.VITE_SMS_SENDER_NUMBER = smsConfig.senderNumber
-    process.env.VITE_ADMIN_PHONE_NUMBER = smsConfig.adminPhone
+  // توجه: در محیط Frontend امکان تغییر متغیرهای build-time وجود ندارد.
+  // مقادیر فقط در localStorage نگهداری می‌شوند و در زمان ارسال استفاده خواهند شد.
 
     setSnackbar({ 
       open: true, 

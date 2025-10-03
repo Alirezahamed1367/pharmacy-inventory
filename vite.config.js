@@ -40,7 +40,7 @@ export default defineConfig({
 
   // Environment variables
   define: {
-    // دسترسی به متغیرهای محیطی در کد
-    __APP_VERSION__: JSON.stringify(process.env.npm_package_version),
+    // دسترسی به نسخه برنامه (بدون اتکا به process در زمان اجرا)
+  __APP_VERSION__: JSON.stringify('1.0.0'),
   }
 })

@@ -116,7 +116,7 @@ const ChangePassword = ({ open, onClose, currentUser }) => {
         setSuccess(false)
       }, 2000)
 
-    } catch (error) {
+    } catch {
       setError('خطا در تغییر رمز عبور. لطفاً مجدداً تلاش کنید.')
     } finally {
       setLoading(false)

@@ -31,18 +31,18 @@ import {
   Lock,
 } from '@mui/icons-material'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { signOut } from '../services/supabase'
+// حذف signOut استفاده نشده برای رفع خطای lint
 import ChangePassword from './ChangePassword'
 
 const drawerWidth = 280
 
-const menuItems = [
+const baseMenuItems = [
   { text: 'داشبورد', path: '/', icon: <DashboardIcon /> },
   { text: 'مدیریت داروها', path: '/drugs', icon: <MedicationIcon /> },
   { text: 'رسید کالا', path: '/receipts', icon: <InventoryIcon /> },
+  { text: 'حواله‌ها', path: '/transfers', icon: <InventoryIcon /> },
   { text: 'مدیریت انبارها', path: '/warehouses', icon: <WarehouseIcon /> },
   { text: 'گزارشات', path: '/reports', icon: <ReportsIcon /> },
-  { text: 'تنظیمات', path: '/settings', icon: <SettingsIcon /> },
 ]
 
 export default function Layout({ children, onLogout }) {
@@ -101,7 +101,7 @@ export default function Layout({ children, onLogout }) {
       </Toolbar>
       <Divider />
       <List>
-        {menuItems.map((item) => (
+  {((currentUser.role === 'admin') || (currentUser.role === 'super_admin') ? [...baseMenuItems, { text: 'تنظیمات', path: '/settings', icon: <SettingsIcon /> }] : baseMenuItems).map((item) => (
           <ListItem key={item.text} disablePadding>
             <ListItemButton
               onClick={() => handleNavigate(item.path)}

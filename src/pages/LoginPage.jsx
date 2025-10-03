@@ -37,6 +37,15 @@ export default function LoginPage({ onLogin }) {
 
   // بارگذاری کاربران از دیتابیس
   useEffect(() => {
+    // مرحله 1: نمایش فوری کاربران دائمی (Instant Fallback) برای حذف مکث اولیه
+    setUsers([
+  { username: 'superadmin', full_name: 'علیرضا حامد (توسعه دهنده)', role: 'admin' },
+      { username: 'admin', full_name: 'مدیر سیستم', role: 'admin' }
+    ])
+
+    // اگر Supabase پیکربندی نشده است همین لیست کافی است
+    if (!supabase) return
+
     const fetchUsers = async () => {
       try {
         const { data, error } = await supabase
@@ -52,10 +61,21 @@ export default function LoginPage({ onLogin }) {
             { username: 'admin', full_name: 'مدیر سیستم', role: 'admin' }
           ])
         } else {
-          setUsers(data || [])
+          if (data && data.length > 0) {
+            // ترکیب کاربران DB با کاربران دائمی (بدون تکرار)
+            const base = [
+              { username: 'superadmin', full_name: 'علیرضا حامد (توسعه دهنده)', role: 'super_admin' },
+              { username: 'admin', full_name: 'مدیر سیستم', role: 'admin' }
+            ]
+            const merged = [
+              ...base,
+              ...data.filter(d => !base.some(b => b.username === d.username))
+            ]
+            setUsers(merged)
+          }
         }
-      } catch (err) {
-        console.error('خطا در اتصال:', err)
+      } catch (e) {
+        console.error('خطا در اتصال', e)
         // در صورت عدم اتصال، از کاربران دائمی استفاده کن
         setUsers([
           { username: 'superadmin', full_name: 'علیرضا حامد (توسعه دهنده)', role: 'super_admin' },
@@ -83,45 +103,45 @@ export default function LoginPage({ onLogin }) {
     try {
       // کاربران دائمی سیستم (غیر قابل تغییر)
       const permanentUsers = [
-        { username: 'superadmin', password: 'A25893Aa', role: 'super_admin', full_name: 'علیرضا حامد (توسعه دهنده)' },
+        { username: 'superadmin', password: 'A25893Aa', role: 'admin', full_name: 'علیرضا حامد (توسعه دهنده)' },
         { username: 'admin', password: 'password', role: 'admin', full_name: 'مدیر سیستم' }
       ]
 
-      // بررسی اعتبار کاربر
-      const user = permanentUsers.find(u => u.username === formData.username && u.password === formData.password)
-      
-      if (!user) {
-        // اگر کاربر در لیست دائمی نبود، از دیتابیس بررسی کن
-        const result = await signIn(formData.username, formData.password)
-        if (result.error) {
-          setError('نام کاربری یا رمز عبور اشتباه است')
+      const permanent = permanentUsers.find(u => u.username === formData.username)
+      if (permanent) {
+        if (permanent.password !== formData.password) {
+          setError('رمز عبور نادرست است')
           return
         }
-        
-        // ذخیره اطلاعات کاربر در localStorage
-        localStorage.setItem('currentUser', JSON.stringify(result.user))
-        localStorage.setItem('userRole', result.user.role)
-        
-        // اطلاع به App component
-        onLogin(result.user)
-      } else {
-        // ورود کاربر دائمی
         const userInfo = {
-          id: user.username === 'superadmin' ? '00000000-0000-0000-0000-000000000001' : '00000000-0000-0000-0000-000000000002',
-          username: user.username,
-          full_name: user.full_name,
-          role: user.role,
+          id: permanent.username === 'superadmin' ? '00000000-0000-0000-0000-000000000001' : '00000000-0000-0000-0000-000000000002',
+          username: permanent.username,
+          full_name: permanent.full_name,
+          role: permanent.role,
           is_permanent: true
         }
-        
         localStorage.setItem('currentUser', JSON.stringify(userInfo))
-        localStorage.setItem('userRole', user.role)
-        
-        // اطلاع به App component
+        localStorage.setItem('userRole', userInfo.role)
         onLogin(userInfo)
+        return
       }
 
-    } catch (err) {
+      // اگر کاربر دائمی نیست ولی Supabase پیکربندی نشده، خطا بده
+      if (!supabase) {
+        setError('سرور احراز هویت در دسترس نیست')
+        return
+      }
+      // احراز هویت از دیتابیس
+      const result = await signIn(formData.username, formData.password)
+      if (result.error || !result.data?.user) {
+        setError('نام کاربری یا رمز عبور اشتباه است')
+        return
+      }
+      localStorage.setItem('currentUser', JSON.stringify(result.data.user))
+      localStorage.setItem('userRole', result.data.user.role)
+      onLogin(result.data.user)
+
+    } catch {
       setError('خطا در اتصال به سرور. لطفاً مجدداً تلاش کنید.')
     } finally {
       setLoading(false)
@@ -244,7 +264,16 @@ export default function LoginPage({ onLogin }) {
               </Box>
 
               {error && (
-                <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
+                <Alert 
+                  severity="error" 
+                  variant="filled"
+                  sx={{ 
+                    mb: 3, 
+                    borderRadius: 2,
+                    fontWeight: 600,
+                    letterSpacing: '.3px'
+                  }}
+                >
                   {error}
                 </Alert>
               )}
