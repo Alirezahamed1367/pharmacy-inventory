@@ -34,7 +34,7 @@ import {
   SwapHoriz as MovementIcon,
   Warning as WarningIcon,
 } from '@mui/icons-material'
-import { getInventoryDetailed, getWarehouses, getActiveDrugs, isBackendAvailable, getMovementHistory } from '../services/supabase'
+import { getInventoryDetailed, getWarehouses, getActiveDrugs, isBackendAvailable } from '../services/supabase'
 import Skeleton from '@mui/material/Skeleton'
 
 const Reports = () => {
@@ -49,7 +49,7 @@ const Reports = () => {
   const [expiringMid, setExpiringMid] = useState([])
   const [warehouses, setWarehouses] = useState([])
   const [drugs, setDrugs] = useState([])
-  const [movements, setMovements] = useState([])
+  // const [movements, setMovements] = useState([]) // حرکت داروها - فعلاً غیرفعال
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
