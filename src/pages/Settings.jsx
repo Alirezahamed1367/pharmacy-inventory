@@ -251,7 +251,7 @@ const Settings = () => {
     setSelectedSupplier(null)
   }
 
-  // افزودن یا ویرایش تامین‌کننده (در system_settings)
+  // افزودن یا ویرایش تامین‌کننده در جدول suppliers
   const handleSaveSupplier = async () => {
     try {
       const specialtiesArr = supplierFormData.specialties.split(',').map(s => s.trim()).filter(Boolean)
@@ -264,17 +264,17 @@ const Settings = () => {
         contact_person: supplierFormData.contact || null,
         contact_phone: supplierFormData.contactPhone || null,
         specialties: specialtiesArr.join(', '),
-        is_active: supplierFormData.isActive,
+        is_active: supplierFormData.isActive
       }
       if (selectedSupplier) {
         const { error } = await supabase.from('suppliers').update(payload).eq('id', selectedSupplier.id)
         if (error) throw error
       } else {
-        const { error } = await supabase.from('suppliers').insert([{ ...payload }])
+        const { error } = await supabase.from('suppliers').insert([payload])
         if (error) throw error
       }
-      fetchAll();
-      handleCloseSupplierDialog();
+      fetchAll()
+      handleCloseSupplierDialog()
     } catch (err) {
       setError(err.message || 'خطا در ذخیره تامین‌کننده')
     }
@@ -417,6 +417,8 @@ const Settings = () => {
                             color={getRoleColor(user.role)}
                           />
                           {user.active && <Chip size="small" label="فعال" color="success" variant="outlined" />}
+                            {user.is_active && <Chip size="small" label="فعال" color="success" variant="outlined" />}
+                            {user.is_active && <Chip size="small" label="فعال" color="success" variant="outlined" />}
                         </Box>
                       }
                       secondary={
