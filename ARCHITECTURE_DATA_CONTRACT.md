@@ -233,8 +233,37 @@ function classifyExpiry(items) {
 ---
 ## 20. خلاصه
 با جداسازی «اطلاعات ثابت (drugs)» از «تحرکات موجودی (receipts/transfers)» و تحمیل مسیرهای رسمی برای تغییر موجودی، Data Contract شما قابل اعتماد و پایدار باقی می‌ماند. این سند را به‌روزرسانی کنید هر زمان که:
-- فیلد جدیدی افزوده می‌شود
-- رفتار فرآیند ورود/انتقال تغییر می‌کند
-- سیاست امنیتی جدیدی اعمال می‌گردد
+
+## Inventory Data Contract
+
+### 2025-10 Lot-Level Redesign (Phase 1)
+We are moving from drug-level expire_date to lot-level (drug_lots) with FEFO picking.
+
+New tables / columns:
+- drug_lots(id, drug_id, lot_number NULL, expire_date DATE, created_at)
+- warehouses.manager_user_id (FK users)
+- inventory.lot_id (nullable phase1 → NOT NULL later)
+- receipt_items.lot_id, transfer_items.lot_id
+
+Backfill approach:
+1. For each existing drug with expire_date create (if not exists) a lot row with NULL lot_number.
+2. Attach inventory / receipt_items / transfer_items rows to that lot (lot_id).
+3. UI gradually switches to lot-based selection; expire_date in drugs kept until phase3.
+
+Expiry Bands:
+| Band | Range (days) | Color |
+|------|--------------|-------|
+| expired | < 0 | error |
+| imminent | 0–30 | error (filled) |
+| soon | 31–90 | warning |
+| safe | >90 | success |
+
+FEFO Allocation:
+`fefoAllocate(lots, quantity)` sorts by (band priority, expire_date asc) and consumes until satisfied; returns shortage if any.
+
+Next Phases:
+Phase2: UI + services create/use lots on receipts & transfers.
+Phase3: Drop drugs.expire_date & batch_number columns after full adoption.
+Phase4: RLS policies (warehouse scoping by manager_user_id).
 
 موفق باشید 🌱
