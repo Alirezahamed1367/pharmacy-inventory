@@ -33,7 +33,7 @@ import { getDrugs, addDrug, updateDrug, deleteDrug } from '../services/supabase'
 import ImageUpload from '../components/ImageUpload'
 import ImageViewer from '../components/ImageViewer'
 import { buildUserError, guardOffline, isOffline } from '../utils/errorUtils'
-import { formatDMY } from '../utils/dateUtils'
+import { formatDMY, formatJalali, parseDMYToISO } from '../utils/dateUtils'
 
 const DrugManagement = () => {
   // لیست انواع بسته‌بندی
@@ -63,7 +63,7 @@ const DrugManagement = () => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    expire_date: '',
+    expire_dmy: '', // فرم نمایش DD/MM/YYYY
     package_type: '',
     image_url: ''
   })
@@ -88,7 +88,7 @@ const DrugManagement = () => {
     setFormData({
       name: '',
       description: '',
-      expire_date: '',
+      expire_dmy: '',
       package_type: '',
       image_url: ''
     })
@@ -101,19 +101,26 @@ const DrugManagement = () => {
       setAlert({ type: 'warning', message: offline.message })
       return
     }
-    if (!formData.name || !formData.package_type || !formData.expire_date) {
+    if (!formData.name || !formData.package_type || !formData.expire_dmy) {
       setAlert({ type: 'error', message: 'نام، نوع بسته‌بندی و تاریخ انقضا الزامی است' })
       return
     }
+    const isoExpire = parseDMYToISO(formData.expire_dmy)
+    if (!isoExpire) {
+      setAlert({ type: 'error', message: 'فرمت تاریخ صحیح نیست (DD/MM/YYYY)' })
+      return
+    }
     // بررسی تکراری نبودن ترکیب کلیدی
-    const dup = drugs.find(d => d.name === formData.name && d.package_type === formData.package_type && d.expire_date === formData.expire_date && (!editingDrug || d.id !== editingDrug.id))
+  const dup = drugs.find(d => d.name === formData.name && d.package_type === formData.package_type && d.expire_date === isoExpire && (!editingDrug || d.id !== editingDrug.id))
     if (dup) {
       setAlert({ type: 'error', message: 'این واریانت (نام + بسته‌بندی + تاریخ انقضا) قبلاً وجود دارد' })
       return
     }
     setLoading(true)
     try {
-      const op = editingDrug ? updateDrug(editingDrug.id, formData) : addDrug(formData)
+  const payload = { ...formData, expire_date: isoExpire }
+  delete payload.expire_dmy
+  const op = editingDrug ? updateDrug(editingDrug.id, payload) : addDrug(payload)
       const result = await op
       if (result.error) {
         setAlert({ type: 'error', message: buildUserError(result.error) })
@@ -135,7 +142,7 @@ const DrugManagement = () => {
     setFormData({
       name: drug.name || '',
       description: drug.description || '',
-      expire_date: drug.expire_date || '',
+      expire_dmy: drug.expire_date ? formatDMY(drug.expire_date) : '',
       package_type: drug.package_type || '',
       image_url: drug.image_url || ''
     })
@@ -335,12 +342,11 @@ const DrugManagement = () => {
             <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
-                label="تاریخ انقضا"
-                type="date"
-                value={formData.expire_date}
-                onChange={(e) => setFormData(prev => ({ ...prev, expire_date: e.target.value }))}
-                InputLabelProps={{ shrink: true }}
-                helperText="تاریخ انقضای دارو"
+                label="تاریخ انقضا (DD/MM/YYYY)"
+                placeholder="مثال: 25/12/2025"
+                value={formData.expire_dmy}
+                onChange={(e) => setFormData(prev => ({ ...prev, expire_dmy: e.target.value }))}
+                helperText={formData.expire_dmy ? `معادل شمسی: ${formatJalali(parseDMYToISO(formData.expire_dmy))}` : 'فرمت: روز/ماه/سال'}
               />
             </Grid>
 

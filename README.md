@@ -329,3 +329,28 @@ npm run perf:images
 node ./scripts/perfImageTest.mjs 5
 ```
 
+---
+## 🛠 عیب‌یابی RLS و خطاهای درج دارو
+
+اگر پیام «new row violates row-level security policy for table \"drugs\"» دریافت می‌کنید:
+1. بررسی کنید آیا از Supabase Auth واقعی (session) استفاده می‌کنید:
+   ```sql
+   select auth.uid();
+   ```
+   اگر NULL است یعنی سیاست‌های is_admin / is_manager کاربر را تشخیص نمی‌دهند.
+2. اجرای Migration اصلاح سیاست (در صورت نیاز):
+   - `2025_10_03_adjust_drugs_policies.sql` (اجازه INSERT برای admin و manager)
+   - در صورت تداوم مشکل و نیاز فوری: `2025_10_04_relax_drugs_rls_and_fk.sql` (اجازه INSERT موقت برای همه و تغییر FK)
+3. پس از مهاجرت به Supabase Auth، سیاست موقت را حذف و سیاست محدودکننده را برگردانید.
+
+### خطای FK حذف کاربر مدیر انبار
+اگر خطا: `update or delete on table "users" violates foreign key constraint "warehouses_manager_user_id_fkey"` دریافت شد:
+- Migration `2025_10_04_relax_drugs_rls_and_fk.sql` را اجرا کنید تا FK به `ON DELETE SET NULL` تغییر کند.
+- سپس حذف کاربر مدیر، مقدار `manager_user_id` را خودکار NULL می‌کند.
+
+### برگشت به حالت امن پس از استقرار Auth
+1. حذف یا Drop کردن policy موقت `drugs_insert_any_logged`.
+2. فقط نگه داشتن سیاست‌های admin/manager.
+3. تست درج دارو با نقش‌های مختلف.
+
+
