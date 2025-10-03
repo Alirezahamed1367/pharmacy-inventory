@@ -208,6 +208,11 @@ npm run preview
 
 # بررسی کیفیت کد
 npm run lint
+
+# اسکریپت‌های کیفیت و اعتبارسنجی (Lots & Performance)
+npm run smoke          # بررسی اجزای پایه پروژه
+npm run audit:lots     # اطمینان از نبود NULL در lot_id پیش از Migration فاز 2
+npm run perf:images    # تست تاخیر آپلود و هدرهای کش تصویر (Supabase Storage)
 ```
 
 ## 📁 ساختار پروژه
@@ -271,3 +276,37 @@ The React Compiler is not enabled on this template. To add it, see [this documen
 ## Expanding the ESLint configuration
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+
+---
+## ✨ فاز 2 Lots (اجباری کردن lot_id)
+
+پس از اجرای کامل مهاجرت اولیه و پوشش‌دهی همه رکوردها با `lot_id`, مرحله دوم شامل اجباری کردن این ستون است.
+
+### مراحل پیشنهادی:
+1. اجرای اسکریپت اعتبارسنجی:
+   ```bash
+   npm run audit:lots
+   ```
+   اگر خروجی FAILED بود، ابتدا مشکل را رفع کنید.
+2. اعمال Migration جدید: فایل `database/migrations/2025_10_03_enforce_lot_not_null.sql` را در Supabase SQL اجرا کنید.
+3. اجرای Smoke Test برای اطمینان:
+   ```bash
+   npm run smoke
+   ```
+4. تست عملیات رسید و حواله با ایجاد/تکمیل نمونه.
+
+### رفع خطای احتمالی Migration
+اگر Migration پیام خطا درباره وجود NULL داد:
+- مجدد `audit:lots` را اجرا و رکوردهای مشکل‌دار را با یک `UPDATE` مناسب lot_id دار کنید.
+- سپس دوباره Migration را اجرا نمایید.
+
+### اسکریپت عملکردی تصاویر
+برای مشاهده میانگین زمان آپلود:
+```bash
+npm run perf:images
+```
+خروجی شامل میانگین میلی‌ثانیه و Sample headers برای کنترل Cache خواهد بود؛ در صورت نیاز می‌توانید تعداد تکرار را تغییر دهید:
+```bash
+node ./scripts/perfImageTest.mjs 5
+```
+

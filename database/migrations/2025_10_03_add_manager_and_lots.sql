@@ -28,21 +28,36 @@ ALTER TABLE public.transfer_items ADD COLUMN IF NOT EXISTS lot_id UUID REFERENCE
 
 -- 4. Backfill: create a lot per drug using existing drugs.expire_date if inventory rows without lot exist.
 -- (Idempotent: skip if already created)
+-- Revised backfill: production schema may not have drug_id on transfer_items; instead we later map via inventory join.
 DO $$
-DECLARE r RECORD; new_lot_id UUID; d_exp DATE; inv RECORD; BEGIN
+DECLARE r RECORD; new_lot_id UUID; BEGIN
   FOR r IN SELECT id, expire_date FROM public.drugs WHERE expire_date IS NOT NULL LOOP
-    -- create lot if not exists
-    SELECT id INTO new_lot_id FROM public.drug_lots WHERE drug_id = r.id AND expire_date = r.expire_date AND lot_number IS NULL LIMIT 1;
+    SELECT id INTO new_lot_id FROM public.drug_lots 
+      WHERE drug_id = r.id AND expire_date = r.expire_date AND lot_number IS NULL LIMIT 1;
     IF new_lot_id IS NULL THEN
-      INSERT INTO public.drug_lots(drug_id, lot_number, expire_date) VALUES (r.id, NULL, r.expire_date) RETURNING id INTO new_lot_id;
+      INSERT INTO public.drug_lots(drug_id, lot_number, expire_date)
+        VALUES (r.id, NULL, r.expire_date)
+        RETURNING id INTO new_lot_id;
     END IF;
-    -- attach inventory rows
-    UPDATE public.inventory SET lot_id = new_lot_id WHERE lot_id IS NULL AND drug_id = r.id; -- assuming inventory currently has drug_id column; if not adjust later
-    -- attach receipt_items / transfer_items (if they have drug_id columns in current design)
+    -- inventory & receipt_items have drug_id
+    UPDATE public.inventory SET lot_id = new_lot_id WHERE lot_id IS NULL AND drug_id = r.id;
     UPDATE public.receipt_items SET lot_id = new_lot_id WHERE lot_id IS NULL AND drug_id = r.id;
-    UPDATE public.transfer_items SET lot_id = new_lot_id WHERE lot_id IS NULL AND drug_id = r.id;
   END LOOP;
 END$$;
+
+-- Populate transfer_items.lot_id via inventory link (transfer_items has inventory_id)
+UPDATE public.transfer_items ti
+SET lot_id = inv.lot_id
+FROM public.inventory inv
+WHERE ti.lot_id IS NULL AND ti.inventory_id = inv.id AND inv.lot_id IS NOT NULL;
+
+-- If any transfer_items still without lot, attempt fallback using a default lot per inventory drug (if inventory holds drug_id)
+-- (Optional; uncomment if needed)
+-- UPDATE public.transfer_items ti
+-- SET lot_id = dl.id
+-- FROM public.inventory inv
+-- JOIN public.drug_lots dl ON dl.drug_id = inv.drug_id AND dl.lot_number IS NULL
+-- WHERE ti.lot_id IS NULL AND ti.inventory_id = inv.id;
 
 -- Note: Later phases will enforce NOT NULL and drop old columns after code adjustment.
 

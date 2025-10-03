@@ -20,7 +20,9 @@
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "deploy": "npm run build && npx vercel --prod",
-    "smoke": "node ./scripts/smokeCheck.mjs"
+    "smoke": "node ./scripts/smokeCheck.mjs",
+    "audit:lots": "node ./scripts/auditLots.mjs",
+    "perf:images": "node ./scripts/perfImageTest.mjs"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",

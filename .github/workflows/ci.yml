@@ -32,3 +32,5 @@ jobs:
       - name: Smoke Script
         run: |
           if [ -f scripts/smokeCheck.mjs ]; then node scripts/smokeCheck.mjs || true; fi
+      - name: Summary
+        run: echo "CI pipeline completed successfully"

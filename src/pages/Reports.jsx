@@ -48,6 +48,14 @@ const Reports = () => {
   const [expired, setExpired] = useState([])
   const [expiringSoon, setExpiringSoon] = useState([])
   const [expiringMid, setExpiringMid] = useState([])
+  const computeTotals = () => {
+    const totalQty = inventory.reduce((sum,i)=> sum + (i.quantity||0),0)
+    const expiredQty = expired.reduce((sum,i)=> sum + (i.quantity||0),0)
+    const imminentQty = expiringSoon.reduce((sum,i)=> sum + (i.quantity||0),0)
+    const midQty = expiringMid.reduce((sum,i)=> sum + (i.quantity||0),0)
+    const safeQty = totalQty - expiredQty - imminentQty - midQty
+    return { totalQty, expiredQty, imminentQty, midQty, safeQty }
+  }
   const [warehouses, setWarehouses] = useState([])
   const [drugs, setDrugs] = useState([])
   const [movements] = useState([]) // حرکات فعلا از view جداگانه خوانده نمی‌شود
@@ -199,6 +207,21 @@ const Reports = () => {
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
         </Alert>
+      )}
+
+      {/* KPI Cards */}
+      {!loading && !error && (
+        <Grid container spacing={2} sx={{ mb:3 }}>
+          {(() => { const k = computeTotals(); const pct = v => k.totalQty? ((v/k.totalQty)*100).toFixed(1):'0.0'; return (
+            <>
+              <Grid item xs={12} md={2}><Card><CardContent><Typography variant='subtitle2'>کل موجودی</Typography><Typography variant='h5'>{k.totalQty}</Typography></CardContent></Card></Grid>
+              <Grid item xs={12} md={2}><Card><CardContent><Typography variant='subtitle2'>منقضی</Typography><Typography color='error' variant='h5'>{k.expiredQty}</Typography><Typography variant='caption'>{pct(k.expiredQty)}%</Typography></CardContent></Card></Grid>
+              <Grid item xs={12} md={2}><Card><CardContent><Typography variant='subtitle2'>تا 30 روز</Typography><Typography color='warning.main' variant='h5'>{k.imminentQty}</Typography><Typography variant='caption'>{pct(k.imminentQty)}%</Typography></CardContent></Card></Grid>
+              <Grid item xs={12} md={2}><Card><CardContent><Typography variant='subtitle2'>31-90 روز</Typography><Typography color='secondary' variant='h5'>{k.midQty}</Typography><Typography variant='caption'>{pct(k.midQty)}%</Typography></CardContent></Card></Grid>
+              <Grid item xs={12} md={2}><Card><CardContent><Typography variant='subtitle2'>ایمن</Typography><Typography color='success.main' variant='h5'>{k.safeQty}</Typography><Typography variant='caption'>{pct(k.safeQty)}%</Typography></CardContent></Card></Grid>
+            </>
+          )})()}
+        </Grid>
       )}
 
       {/* Filters */}

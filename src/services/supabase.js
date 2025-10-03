@@ -603,6 +603,8 @@ export const getReceipts = async (status = null) => {
 }
 
 // ایجاد رسید جدید (در وضعیت pending)
+// ایجاد رسید جدید (نسخه lot-aware: در صورت نیاز ایجاد lot جدید برای هر آیتم)
+// items: [{ drug_id, quantity, batch_number?, supplier_id?, expire_date? (اختیاری اگر بخواهیم lot سفارشی بسازیم) }]
 export const createReceipt = async ({ supplier_id = null, destination_warehouse_id, notes = null, items = [], document_date = null }) => {
   if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
   if (!destination_warehouse_id) return { error: { message: 'انبار مقصد الزامی است' } }
@@ -617,27 +619,65 @@ export const createReceipt = async ({ supplier_id = null, destination_warehouse_
     .single()
   if (receiptError) return { error: receiptError }
 
-  // درج آیتم‌ها (اکنون supplier_id اختصاصی هر آیتم ممکن است)
-  const itemsToInsert = items.map(it => ({
-    receipt_id: receiptData.id,
-    drug_id: it.drug_id,
-    quantity: it.quantity,
-    batch_number: it.batch_number || null,
-    supplier_id: it.supplier_id || supplier_id || null
-  }))
+  const itemsToInsert = []
+  for (const it of items) {
+    // تعیین expire_date برای lot: اولویت با it.expire_date سپس drugs.expire_date اگر موجود باشد
+    let lotId = null
+    if (it.expire_date) {
+      // تلاش برای یافتن lot موجود
+      const { data: existingLot, error: lotFindErr } = await supabase
+        .from('drug_lots')
+        .select('id')
+        .eq('drug_id', it.drug_id)
+        .eq('expire_date', it.expire_date)
+        .eq('lot_number', it.batch_number || null)
+        .maybeSingle()
+      if (lotFindErr) return { error: lotFindErr }
+      if (existingLot) {
+        lotId = existingLot.id
+      } else {
+        const { data: newLot, error: lotInsErr } = await supabase
+          .from('drug_lots')
+          .insert([{ drug_id: it.drug_id, expire_date: it.expire_date, lot_number: it.batch_number || null }])
+          .select('id')
+          .single()
+        if (lotInsErr) return { error: lotInsErr }
+        lotId = newLot.id
+      }
+    } else {
+      // تلاش برای گرفتن lot پیش‌فرض (ممکن است در مرحله backfill ایجاد شده باشد)
+      const { data: defaultLot } = await supabase
+        .from('drug_lots')
+        .select('id')
+        .eq('drug_id', it.drug_id)
+        .is('lot_number', null)
+        .limit(1)
+        .maybeSingle()
+      lotId = defaultLot?.id || null
+    }
+    itemsToInsert.push({
+      receipt_id: receiptData.id,
+      drug_id: it.drug_id,
+      quantity: it.quantity,
+      batch_number: it.batch_number || null,
+      supplier_id: it.supplier_id || supplier_id || null,
+      lot_id: lotId
+    })
+  }
   const { error: itemsError } = await supabase.from('receipt_items').insert(itemsToInsert)
   if (itemsError) return { error: itemsError }
   return { data: receiptData, error: null }
 }
 
 // تکمیل رسید: تغییر وضعیت + به‌روزرسانی موجودی (upsert)
+// تکمیل receipt (lot-aware): upsert موجودی با توجه به lot_id
 export const completeReceipt = async (receipt_id) => {
   if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
   try {
     // دریافت آیتم‌های رسید
     const { data: items, error: itemsError } = await supabase
       .from('receipt_items')
-      .select('id, drug_id, quantity, batch_number, receipt_id, receipts(destination_warehouse_id)')
+      .select('id, drug_id, quantity, batch_number, lot_id, receipt_id, receipts(destination_warehouse_id)')
       .eq('receipt_id', receipt_id)
     if (itemsError) return { error: itemsError }
     if (!items || items.length === 0) return { error: { message: 'آیتمی برای این رسید ثبت نشده است' } }
@@ -645,7 +685,7 @@ export const completeReceipt = async (receipt_id) => {
     const destinationWarehouseId = items[0].receipts?.destination_warehouse_id
     if (!destinationWarehouseId) return { error: { message: 'انبار مقصد یافت نشد' } }
 
-    // Upsert موجودی برای هر آیتم (drug_id + warehouse + batch)
+    // Upsert موجودی برای هر آیتم (drug_id + warehouse + batch + lot_id)
     for (const item of items) {
       const { data: existing, error: invErr } = await supabase
         .from('inventory')
@@ -653,6 +693,7 @@ export const completeReceipt = async (receipt_id) => {
         .eq('drug_id', item.drug_id)
         .eq('warehouse_id', destinationWarehouseId)
         .eq('batch_number', item.batch_number || null)
+        .eq('lot_id', item.lot_id)
         .maybeSingle()
       if (invErr) return { error: invErr }
 
@@ -665,7 +706,7 @@ export const completeReceipt = async (receipt_id) => {
       } else {
         const { error: insErr } = await supabase
           .from('inventory')
-          .insert([{ drug_id: item.drug_id, warehouse_id: destinationWarehouseId, quantity: item.quantity, batch_number: item.batch_number || null }])
+          .insert([{ drug_id: item.drug_id, warehouse_id: destinationWarehouseId, quantity: item.quantity, batch_number: item.batch_number || null, lot_id: item.lot_id }])
         if (insErr) return { error: insErr }
       }
     }
@@ -704,7 +745,7 @@ export const getReceiptItems = async (receipt_id) => {
   if (!supabase) return { data: [], error: null }
   const { data, error } = await supabase
     .from('receipt_items')
-    .select('*, drugs(name, expire_date, package_type), suppliers(name)')
+    .select('*, drugs(name, expire_date, package_type), suppliers(name), lot:drug_lots(expire_date, lot_number)')
     .eq('receipt_id', receipt_id)
   return { data: data || [], error }
 }
@@ -726,6 +767,8 @@ export const getTransfers = async (status = null) => {
 }
 
 // ایجاد حواله جدید با وضعیت in_transit و آیتم‌ها (quantity_sent) و رزرو موقت کسر از موجودی مبدا
+// ایجاد حواله جدید (نسخه به‌روز شده: پشتیبانی از lot_id برای هر آیتم)
+// items: [{ inventory_id, lot_id?, quantity_sent }]
 export const createTransfer = async ({ source_warehouse_id, destination_warehouse_id, notes = null, items = [], document_date = null }) => {
   if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
   if (!source_warehouse_id || !destination_warehouse_id) return { error: { message: 'انبار مبدا و مقصد الزامی است' } }
@@ -737,15 +780,19 @@ export const createTransfer = async ({ source_warehouse_id, destination_warehous
   const { data: transferData, error: tErr } = await supabase.from('transfers').insert([base]).select().single()
   if (tErr) return { error: tErr }
 
-  // بررسی موجودی و درج آیتم‌ها
+  // بررسی موجودی و درج آیتم‌ها (با تایید lot_id در صورت وجود)
   for (const it of items) {
+    if (!it.inventory_id || !it.quantity_sent) return { error: { message: 'آیتم حواله نامعتبر است' } }
     const { data: inv, error: invErr } = await supabase
       .from('inventory')
-      .select('id, quantity')
+      .select('id, quantity, lot_id, warehouse_id')
       .eq('id', it.inventory_id)
       .single()
     if (invErr) return { error: invErr }
-    if (!inv || inv.quantity < it.quantity_sent) {
+    if (!inv) return { error: { message: 'آیتم موجودی یافت نشد' } }
+    if (inv.warehouse_id !== source_warehouse_id) return { error: { message: 'موجودی انتخاب‌شده متعلق به انبار مبدا نیست' } }
+    if (it.lot_id && inv.lot_id && it.lot_id !== inv.lot_id) return { error: { message: 'عدم تطابق lot برای یکی از آیتم‌ها' } }
+    if (inv.quantity < it.quantity_sent) {
       return { error: { message: 'موجودی کافی برای یکی از اقلام وجود ندارد' } }
     }
     const { error: updErr } = await supabase
@@ -753,13 +800,16 @@ export const createTransfer = async ({ source_warehouse_id, destination_warehous
       .update({ quantity: inv.quantity - it.quantity_sent, updated_at: new Date().toISOString() })
       .eq('id', inv.id)
     if (updErr) return { error: updErr }
-    const { error: insErr } = await supabase.from('transfer_items').insert([{ transfer_id: transferData.id, inventory_id: it.inventory_id, quantity_sent: it.quantity_sent }])
+    const row = { transfer_id: transferData.id, inventory_id: it.inventory_id, quantity_sent: it.quantity_sent }
+    if (it.lot_id || inv.lot_id) row.lot_id = it.lot_id || inv.lot_id
+    const { error: insErr } = await supabase.from('transfer_items').insert([row])
     if (insErr) return { error: insErr }
   }
   return { data: transferData, error: null }
 }
 
 // تکمیل حواله: ثبت quantity_received (اگر کمتر/بیشتر، وضعیت discrepancy) + افزودن/افزایش موجودی مقصد
+// تکمیل حواله (به‌روزرسانی: انتقال lot_id به موجودی مقصد)
 export const completeTransfer = async (transfer_id, receivedItems) => {
   if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
   try {
@@ -769,7 +819,7 @@ export const completeTransfer = async (transfer_id, receivedItems) => {
     if (transfer.status !== 'in_transit') return { error: { message: 'این حواله در وضعیت مجاز برای تکمیل نیست' } }
 
     // دریافت آیتم‌های حواله جهت تطبیق
-    const { data: items, error: itErr } = await supabase.from('transfer_items').select('id, inventory_id, quantity_sent').eq('transfer_id', transfer_id)
+  const { data: items, error: itErr } = await supabase.from('transfer_items').select('id, inventory_id, lot_id, quantity_sent').eq('transfer_id', transfer_id)
     if (itErr) return { error: itErr }
 
     let discrepancy = false
@@ -781,7 +831,7 @@ export const completeTransfer = async (transfer_id, receivedItems) => {
       const { error: updItemErr } = await supabase.from('transfer_items').update({ quantity_received: qtyReceived, discrepancy_notes: recv?.discrepancy_notes || null }).eq('id', it.id)
       if (updItemErr) return { error: updItemErr }
       // پیدا کردن رکورد inventory مبدا + استخراج drug_id, warehouse_id, batch برای ساخت رکورد مقصد
-      const { data: invSrc, error: invSrcErr } = await supabase.from('inventory').select('drug_id, batch_number').eq('id', it.inventory_id).single()
+      const { data: invSrc, error: invSrcErr } = await supabase.from('inventory').select('drug_id, batch_number, lot_id').eq('id', it.inventory_id).single()
       if (invSrcErr) return { error: invSrcErr }
       // موجودی مقصد را upsert کن
       const { data: invDest, error: findDestErr } = await supabase
@@ -790,13 +840,14 @@ export const completeTransfer = async (transfer_id, receivedItems) => {
         .eq('drug_id', invSrc.drug_id)
         .eq('warehouse_id', transfer.destination_warehouse_id)
         .eq('batch_number', invSrc.batch_number)
+        .eq('lot_id', invSrc.lot_id)
         .maybeSingle()
       if (findDestErr) return { error: findDestErr }
       if (invDest) {
         const { error: updDestErr } = await supabase.from('inventory').update({ quantity: invDest.quantity + qtyReceived, updated_at: new Date().toISOString() }).eq('id', invDest.id)
         if (updDestErr) return { error: updDestErr }
       } else {
-        const { error: insDestErr } = await supabase.from('inventory').insert([{ drug_id: invSrc.drug_id, warehouse_id: transfer.destination_warehouse_id, quantity: qtyReceived, batch_number: invSrc.batch_number }])
+        const { error: insDestErr } = await supabase.from('inventory').insert([{ drug_id: invSrc.drug_id, warehouse_id: transfer.destination_warehouse_id, quantity: qtyReceived, batch_number: invSrc.batch_number, lot_id: invSrc.lot_id }])
         if (insDestErr) return { error: insDestErr }
       }
     }
@@ -815,9 +866,23 @@ export const getTransferItems = async (transfer_id) => {
   if (!supabase) return { data: [], error: null }
   const { data, error } = await supabase
     .from('transfer_items')
-    .select('*, inventory(id, drug_id, batch_number, quantity, drug:drugs(name, expire_date, package_type))')
+    .select('*, inventory(id, drug_id, batch_number, lot_id, quantity, drug:drugs(name, expire_date, package_type), lot:drug_lots(expire_date, lot_number))')
     .eq('transfer_id', transfer_id)
   return { data: data || [], error }
+}
+
+// دریافت موجودی lots (برای UI حواله) - فقط رکوردهای دارای quantity>0
+export const getAllLotInventory = async () => {
+  if (!supabase) return { data: [], error: null }
+  try {
+    const { data, error } = await supabase
+      .from('inventory')
+      .select('id, warehouse_id, quantity, batch_number, lot_id, drug_id, drugs(name, package_type), lot:drug_lots(expire_date, lot_number)')
+      .gt('quantity', 0)
+    return { data: data || [], error }
+  } catch (e) {
+    return { data: [], error: { message: 'خطا در دریافت موجودی lot: ' + e.message } }
+  }
 }
 
 // تاریخچه حرکات (رسید + حواله)

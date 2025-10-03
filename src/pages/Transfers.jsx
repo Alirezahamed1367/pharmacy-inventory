@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Box, Typography, Card, CardContent, Grid, Button, Alert, Table, TableHead, TableBody, TableRow, TableCell, TableContainer, Paper, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Chip, IconButton } from '@mui/material'
 import { Add as AddIcon, CompareArrows as TransferIcon, Check as CheckIcon, Error as ErrorIcon } from '@mui/icons-material'
-import { getTransfers, createTransfer, completeTransfer, getTransferItems, getAllWarehouses } from '../services/supabase'
-import { getInventoryView } from '../services/supabase'
+import { getTransfers, createTransfer, completeTransfer, getTransferItems, getAllWarehouses, getAllLotInventory } from '../services/supabase'
 import { formatDMY } from '../utils/dateUtils'
 
 // Helper status chip
@@ -15,7 +14,8 @@ const StatusChip = ({ status }) => {
 const Transfers = () => {
   const [transfers, setTransfers] = useState([])
   const [warehouses, setWarehouses] = useState([])
-  const [inventory, setInventory] = useState([])
+  // موجودی lot-محور (هر رکورد inventory الان lot_id دارد یا بزودی خواهد داشت)
+  const [lotInventory, setLotInventory] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [openNew, setOpenNew] = useState(false)
@@ -37,14 +37,14 @@ const Transfers = () => {
       const [tRes, wRes, invRes] = await Promise.all([
         getTransfers(),
         getAllWarehouses(),
-        getInventoryView()
+        getAllLotInventory()
       ])
       if (tRes.error) throw new Error(tRes.error.message)
       if (wRes.error) throw new Error(wRes.error.message)
       // inventory_view ممکن است حذف شده باشد، در صورت نبود، با داده پیش‌فرض ادامه می‌دهیم
       setTransfers(tRes.data)
       setWarehouses(wRes.data)
-      setInventory(invRes.data || [])
+  setLotInventory(invRes.data || [])
     } catch (e) {
       setError(e.message)
     } finally {
@@ -55,20 +55,20 @@ const Transfers = () => {
   const resetForm = () => {
     setForm({ source_warehouse_id: '', destination_warehouse_id: '', notes: '', document_date: new Date().toISOString().slice(0,10) })
     setItems([])
-    setNewItem({ inventory_id: '', quantity_sent: '' })
+  setNewItem({ inventory_id: '', lot_id: '', quantity_sent: '' })
   }
 
   const openNewDialog = () => { resetForm(); setOpenNew(true) }
 
   const addTempItem = () => {
     if (!newItem.inventory_id || !newItem.quantity_sent) return
-    const inv = inventory.find(i=>i.id===newItem.inventory_id)
+    const inv = lotInventory.find(i=>i.id===newItem.inventory_id)
     if (inv && Number(newItem.quantity_sent) > inv.quantity) {
       setError('تعداد درخواستی بیشتر از موجودی است')
       return
     }
-    setItems(prev=>[...prev, newItem])
-    setNewItem({ inventory_id:'', quantity_sent:'' })
+    setItems(prev=>[...prev, { ...newItem, lot_id: inv?.lot_id || null }])
+    setNewItem({ inventory_id:'', lot_id:'', quantity_sent:'' })
   }
 
   const removeTempItem = (idx) => setItems(prev=>prev.filter((_,i)=>i!==idx))
@@ -80,7 +80,7 @@ const Transfers = () => {
     }
     setCreating(true)
     try {
-      const payload = { source_warehouse_id: form.source_warehouse_id, destination_warehouse_id: form.destination_warehouse_id, notes: form.notes || null, document_date: form.document_date, items: items.map(it=>({ inventory_id: it.inventory_id, quantity_sent: Number(it.quantity_sent) })) }
+  const payload = { source_warehouse_id: form.source_warehouse_id, destination_warehouse_id: form.destination_warehouse_id, notes: form.notes || null, document_date: form.document_date, items: items.map(it=>({ inventory_id: it.inventory_id, lot_id: it.lot_id, quantity_sent: Number(it.quantity_sent) })) }
       const { error: cErr } = await createTransfer(payload)
       if (cErr) throw new Error(cErr.message)
       setOpenNew(false)
@@ -204,9 +204,15 @@ const Transfers = () => {
                 <Grid item xs={12} md={6}>
                   <TextField select SelectProps={{ native:true }} label='آیتم موجودی (دارو - انقضا - بچ - موجودی)' fullWidth value={newItem.inventory_id} onChange={e=>setNewItem(i=>({...i,inventory_id:e.target.value}))}>
                     <option value=''>انتخاب...</option>
-                    {inventory.filter(inv=> inv.warehouse_id===form.source_warehouse_id).map(inv=> (
-                      <option key={inv.id} value={inv.id}>{inv.drug_name || inv.name} - {inv.expire_date || inv.drug_expire_date} - {inv.batch_number || 'بدون بچ'} - موجودی:{inv.quantity}</option>
-                    ))}
+                    {lotInventory
+                      .filter(inv=> inv.warehouse_id===form.source_warehouse_id)
+                      .sort((a,b)=> new Date(a.lot?.expire_date || a.expire_date || a.drug_expire_date || '2100-01-01') - new Date(b.lot?.expire_date || b.expire_date || b.drug_expire_date || '2100-01-01'))
+                      .map(inv=> {
+                        const drugName = inv.drugs?.name || inv.drug_name || inv.name
+                        const exp = inv.lot?.expire_date || inv.expire_date || inv.drug_expire_date || '----'
+                        const lotNumber = inv.lot?.lot_number || inv.lot_number || inv.batch_number || 'بدون بچ'
+                        return <option key={inv.id} value={inv.id}>{drugName} - {exp} - {lotNumber} - موجودی:{inv.quantity}</option>
+                      })}
                   </TextField>
                 </Grid>
                 <Grid item xs={12} md={3}>
@@ -228,12 +234,12 @@ const Transfers = () => {
                 </TableHead>
                 <TableBody>
                   {items.map((it,idx)=>{
-                    const inv = inventory.find(iv=>iv.id===it.inventory_id)
+                    const inv = lotInventory.find(iv=>iv.id===it.inventory_id)
                     return (
                       <TableRow key={idx}>
-                        <TableCell>{inv?.drug_name || inv?.name}</TableCell>
-                        <TableCell>{formatDMY(inv?.expire_date || inv?.drug_expire_date)}</TableCell>
-                        <TableCell>{inv?.batch_number || '-'}</TableCell>
+                        <TableCell>{inv?.drugs?.name || inv?.drug_name || inv?.name}</TableCell>
+                        <TableCell>{formatDMY(inv?.lot?.expire_date || inv?.expire_date || inv?.drug_expire_date)}</TableCell>
+                        <TableCell>{inv?.lot?.lot_number || inv?.lot_number || inv?.batch_number || '-'}</TableCell>
                         <TableCell>{it.quantity_sent}</TableCell>
                         <TableCell><IconButton color='error' size='small' onClick={()=>removeTempItem(idx)}>✕</IconButton></TableCell>
                       </TableRow>

@@ -17,7 +17,7 @@ const ReceiptManagement = () => {
   const [form, setForm] = useState({ destination_warehouse_id: '', supplier_id: '', notes: '', document_date: new Date().toISOString().slice(0,10) })
   const [suppliers, setSuppliers] = useState([])
   const [items, setItems] = useState([]) // temp items before create
-  const [newItem, setNewItem] = useState({ drug_id: '', quantity: '', batch_number: '', supplier_id: '' })
+  const [newItem, setNewItem] = useState({ drug_id: '', quantity: '', batch_number: '', supplier_id: '', expire_date: '' })
   const [creating, setCreating] = useState(false)
   const [completing, setCompleting] = useState(false)
 
@@ -51,7 +51,7 @@ const ReceiptManagement = () => {
   const resetForm = () => {
     setForm({ destination_warehouse_id: '', supplier_id: '', notes: '', document_date: new Date().toISOString().slice(0,10) })
     setItems([])
-    setNewItem({ drug_id: '', quantity: '', batch_number: '', supplier_id: '' })
+  setNewItem({ drug_id: '', quantity: '', batch_number: '', supplier_id: '', expire_date: '' })
   }
 
   const handleCreateReceipt = async () => {
@@ -66,7 +66,7 @@ const ReceiptManagement = () => {
         supplier_id: form.supplier_id || null,
         notes: form.notes || null,
         document_date: form.document_date,
-        items: items.map(i => ({ drug_id: i.drug_id, quantity: Number(i.quantity), batch_number: i.batch_number || null, supplier_id: i.supplier_id || null }))
+        items: items.map(i => ({ drug_id: i.drug_id, quantity: Number(i.quantity), batch_number: i.batch_number || null, supplier_id: i.supplier_id || null, expire_date: i.expire_date || null }))
       }
       const { error: cErr } = await createReceipt(payload)
       if (cErr) throw new Error(cErr.message)
@@ -104,7 +104,7 @@ const ReceiptManagement = () => {
   const addTempItem = () => {
     if (!newItem.drug_id || !newItem.quantity) return
     setItems(prev => [...prev, newItem])
-    setNewItem({ drug_id: '', quantity: '', batch_number: '', supplier_id: '' })
+  setNewItem({ drug_id: '', quantity: '', batch_number: '', supplier_id: '', expire_date: '' })
   }
 
   const removeTempItem = (idx) => {
@@ -215,7 +215,10 @@ const ReceiptManagement = () => {
                 <Grid item xs={12} md={2}>
                   <TextField label='بچ' fullWidth value={newItem.batch_number} onChange={e=>setNewItem(i=>({...i,batch_number:e.target.value}))} />
                 </Grid>
-                <Grid item xs={12} md={3}>
+                <Grid item xs={12} md={2}>
+                  <TextField type='date' label='انقضا (اختیاری)' InputLabelProps={{ shrink:true }} fullWidth value={newItem.expire_date} onChange={e=>setNewItem(i=>({...i,expire_date:e.target.value}))} />
+                </Grid>
+                <Grid item xs={12} md={2}>
                   <TextField select SelectProps={{ native:true }} label='تامین‌کننده (اختیاری)' fullWidth value={newItem.supplier_id} onChange={e=>setNewItem(i=>({...i,supplier_id:e.target.value}))}>
                     <option value=''>انتخاب...</option>
                     {suppliers.map(s=> <option key={s.id} value={s.id}>{s.name}</option> )}
@@ -232,6 +235,7 @@ const ReceiptManagement = () => {
                     <TableCell>انقضا</TableCell>
                     <TableCell>تعداد</TableCell>
                     <TableCell>بچ</TableCell>
+                    <TableCell>انقضا (آیتم)</TableCell>
                     <TableCell>تامین‌کننده</TableCell>
                     <TableCell></TableCell>
                   </TableRow>
@@ -245,6 +249,7 @@ const ReceiptManagement = () => {
                         <TableCell>{formatDMY(drug?.expire_date)}</TableCell>
                         <TableCell>{it.quantity}</TableCell>
                         <TableCell>{it.batch_number||'-'}</TableCell>
+                        <TableCell>{it.expire_date ? formatDMY(it.expire_date) : formatDMY(drug?.expire_date)}</TableCell>
                         <TableCell>{suppliers.find(s=>s.id===it.supplier_id)?.name || suppliers.find(s=>s.id===form.supplier_id)?.name || '-'}</TableCell>
                         <TableCell><IconButton color='error' size='small' onClick={()=>removeTempItem(idx)}><DeleteIcon fontSize='small' /></IconButton></TableCell>
                       </TableRow>
