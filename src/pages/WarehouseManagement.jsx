@@ -11,20 +11,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Chip,
   IconButton,
   Avatar,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
   Alert,
 } from '@mui/material'
 import {
@@ -33,7 +21,6 @@ import {
   Delete as DeleteIcon,
   Warehouse as WarehouseIcon,
   LocationOn as LocationIcon,
-  Inventory as InventoryIcon,
   SwapHoriz as TransferIcon,
 } from '@mui/icons-material'
 // TransferDialog حذف شده؛ استفاده از صفحه مستقل Transfers
@@ -59,7 +46,6 @@ export default function WarehouseManagement() {
     description: '',
     location: '',
     manager: '',
-    capacity: '',
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -98,7 +84,6 @@ export default function WarehouseManagement() {
         description: warehouse.description || '',
         location: warehouse.location || '',
         manager: warehouse.manager || '',
-        capacity: warehouse.capacity || '',
       })
     } else {
       setSelectedWarehouse(null)
@@ -107,7 +92,6 @@ export default function WarehouseManagement() {
         description: '',
         location: '',
         manager: '',
-        capacity: '',
       })
     }
     setOpenDialog(true)
@@ -122,12 +106,13 @@ export default function WarehouseManagement() {
   const handleSave = async () => {
     try {
       let result
+      const { capacity, ...sanitized } = formData // ظرفیت فعلاً در ساختار دیتابیس وجود ندارد
       if (selectedWarehouse) {
         // ویرایش
-        result = await updateWarehouse(selectedWarehouse.id, formData)
+        result = await updateWarehouse(selectedWarehouse.id, sanitized)
       } else {
         // افزودن
-        result = await addWarehouse(formData)
+        result = await addWarehouse(sanitized)
       }
       
       if (result.error) throw new Error(result.error.message)
@@ -152,17 +137,7 @@ export default function WarehouseManagement() {
     }
   }
 
-
-
-  const getCapacityPercentage = (current, total) => {
-    return Math.round((current / total) * 100)
-  }
-
-  const getCapacityColor = (percentage) => {
-    if (percentage > 80) return 'error'
-    if (percentage > 60) return 'warning'
-    return 'success'
-  }
+  // قابلیت ظرفیت در نسخه فعلی حذف شده است؛ در صورت نیاز آینده می‌توان از جدول یا view مجزا محاسبه کرد
 
   return (
     <Box>
@@ -200,75 +175,54 @@ export default function WarehouseManagement() {
 
       {/* Warehouses Grid */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        {warehouses.map((warehouse) => {
-          const capacityPercentage = getCapacityPercentage(warehouse.current_stock || 0, warehouse.capacity || 1)
-          return (
-            <Grid item xs={12} md={6} lg={4} key={warehouse.id}>
-              <Card sx={{ height: '100%' }}>
-                <CardContent>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Avatar sx={{ bgcolor: 'primary.main' }}>
-                        <WarehouseIcon />
-                      </Avatar>
-                      <Box>
-                        <Typography variant="h6" fontWeight="bold">
-                          {warehouse.name}
-                        </Typography>
+        {warehouses.map((warehouse) => (
+          <Grid item xs={12} md={6} lg={4} key={warehouse.id}>
+            <Card sx={{ height: '100%' }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Avatar sx={{ bgcolor: 'primary.main' }}>
+                      <WarehouseIcon />
+                    </Avatar>
+                    <Box>
+                      <Typography variant="h6" fontWeight="bold">
+                        {warehouse.name}
+                      </Typography>
+                      {warehouse.manager && (
                         <Typography variant="caption" color="text.secondary">
                           مسئول: {warehouse.manager}
                         </Typography>
-                      </Box>
-                    </Box>
-                    <Box>
-                      <IconButton size="small" color="primary" onClick={() => handleOpenDialog(warehouse)}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton size="small" color="error" onClick={() => handleDelete(warehouse.id)}>
-                        <DeleteIcon />
-                      </IconButton>
+                      )}
                     </Box>
                   </Box>
+                  <Box>
+                    <IconButton size="small" color="primary" onClick={() => handleOpenDialog(warehouse)}>
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton size="small" color="error" onClick={() => handleDelete(warehouse.id)}>
+                      <DeleteIcon />
+                    </IconButton>
+                  </Box>
+                </Box>
 
+                {warehouse.description && (
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     {warehouse.description}
                   </Typography>
+                )}
 
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+                {warehouse.location && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     <LocationIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
                     <Typography variant="caption" color="text.secondary">
                       {warehouse.location}
                     </Typography>
                   </Box>
-
-                  <Box sx={{ mb: 2 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                      <Typography variant="caption">ظرفیت انبار</Typography>
-                      <Typography variant="caption" fontWeight="bold">
-                        {warehouse.current_stock || 0} / {warehouse.capacity || 0}
-                      </Typography>
-                    </Box>
-                    <Box sx={{ width: '100%', height: 8, backgroundColor: 'grey.200', borderRadius: 1, overflow: 'hidden' }}>
-                      <Box
-                        sx={{
-                          width: `${capacityPercentage}%`,
-                          height: '100%',
-                          backgroundColor: getCapacityColor(capacityPercentage) + '.main',
-                          transition: 'width 0.3s ease',
-                        }}
-                      />
-                    </Box>
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
-                      {capacityPercentage}% پر
-                    </Typography>
-                  </Box>
-
-                  {/* نمایش داروهای انبار از طریق ویو یا کوئری جداگانه (در صورت نیاز) */}
-                </CardContent>
-              </Card>
-            </Grid>
-          )
-        })}
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
       </Grid>
 
       {/* Add/Edit Warehouse Dialog */}
@@ -326,15 +280,7 @@ export default function WarehouseManagement() {
               />
             </Grid>
 
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="ظرفیت (تعداد)"
-                type="number"
-                value={formData.capacity}
-                onChange={(e) => setFormData({ ...formData, capacity: parseInt(e.target.value) || '' })}
-              />
-            </Grid>
+            {/* ظرفیت حذف شد */}
           </Grid>
         </DialogContent>
         <DialogActions>
