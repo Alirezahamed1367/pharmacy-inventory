@@ -37,28 +37,25 @@ import {
   SwapHoriz as TransferIcon,
 } from '@mui/icons-material'
 // TransferDialog حذف شده؛ استفاده از صفحه مستقل Transfers
-import { ManagerSelect } from '../components/DropdownSelects'
+// ManagerSelect حذف شد چون ستون مرتبط در جدول وجود ندارد
 
 import { useEffect } from 'react'
 import { 
   getAllWarehouses, 
   addWarehouse, 
   updateWarehouse, 
-  deleteWarehouse, 
-  getWarehouseManagers 
+  deleteWarehouse 
 } from '../services/supabase'
 
 export default function WarehouseManagement() {
   const [warehouses, setWarehouses] = useState([])
-  const [managers, setManagers] = useState([])
+  // managers حذف شد
   const [openDialog, setOpenDialog] = useState(false)
   // انتقال‌ها اکنون در صفحه جداگانه مدیریت می‌شوند
   const [selectedWarehouse, setSelectedWarehouse] = useState(null)
   const [formData, setFormData] = useState({
     name: '',
-    description: '',
     location: '',
-    manager: '',
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -76,10 +73,7 @@ export default function WarehouseManagement() {
       if (warehousesResult.error) throw new Error(warehousesResult.error.message)
       setWarehouses(warehousesResult.data || [])
 
-      // مسئولان انبار (کاربران با نقش manager)
-      const managersResult = await getWarehouseManagers()
-      if (managersResult.error) throw new Error(managersResult.error.message)
-      setManagers(managersResult.data || [])
+  // ستون یا نقش مدیر فعلاً حذف شده است
     } catch (err) {
       setError(err.message || 'خطا در دریافت داده‌ها')
     } finally {
@@ -94,17 +88,13 @@ export default function WarehouseManagement() {
       setSelectedWarehouse(warehouse)
       setFormData({
         name: warehouse.name || '',
-        description: warehouse.description || '',
         location: warehouse.location || '',
-        manager: warehouse.manager || '',
       })
     } else {
       setSelectedWarehouse(null)
       setFormData({
         name: '',
-        description: '',
         location: '',
-        manager: '',
       })
     }
     setOpenDialog(true)
@@ -121,10 +111,10 @@ export default function WarehouseManagement() {
       let result
       if (selectedWarehouse) {
         // ویرایش
-        result = await updateWarehouse(selectedWarehouse.id, formData)
+        result = await updateWarehouse(selectedWarehouse.id, { name: formData.name, location: formData.location })
       } else {
         // افزودن
-        result = await addWarehouse(formData)
+        result = await addWarehouse({ name: formData.name, location: formData.location })
       }
       
       if (result.error) throw new Error(result.error.message)
@@ -203,9 +193,7 @@ export default function WarehouseManagement() {
                         <Typography variant="h6" fontWeight="bold">
                           {warehouse.name}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          مسئول: {warehouse.manager}
-                        </Typography>
+                        {/* ستون مسئول حذف شده */}
                       </Box>
                     </Box>
                     <Box>
@@ -218,9 +206,7 @@ export default function WarehouseManagement() {
                     </Box>
                   </Box>
 
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    {warehouse.description}
-                  </Typography>
+                  {/* توضیحات حذف شده */}
 
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
                     <LocationIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
@@ -260,31 +246,8 @@ export default function WarehouseManagement() {
                 required
               />
             </Grid>
-            <Grid item xs={12} md={6}>
-              <ManagerSelect
-                value={formData.manager}
-                onChange={(newValue) => {
-                  setFormData({ 
-                    ...formData, 
-                    manager: newValue
-                  })
-                }}
-                managers={managers}
-                label="مسئول انبار"
-                required
-                size="medium"
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="توضیحات"
-                multiline
-                rows={3}
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              />
-            </Grid>
+            {/* فیلد مسئول حذف شد */}
+            {/* فیلد توضیحات حذف شد */}
             <Grid item xs={12}>
               <TextField
                 fullWidth

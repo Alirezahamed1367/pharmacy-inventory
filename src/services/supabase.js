@@ -356,9 +356,9 @@ export const getWarehouses = async () => {
 
   try {
     const { data, error } = await supabase
-  .from('warehouses')
-  .select('*')
-  .order('name')
+      .from('warehouses')
+      .select('id,name,location,created_at')
+      .order('name')
 
     return { data: data || [], error }
   } catch (error) {
@@ -375,7 +375,7 @@ export const getAllWarehouses = async () => {
   try {
     const { data, error } = await supabase
       .from('warehouses')
-      .select('*')
+      .select('id,name,location,created_at')
       .order('name')
 
     return { data: data || [], error }
@@ -391,10 +391,15 @@ export const addWarehouse = async (warehouseData) => {
   }
 
   try {
+    // فقط ستون‌های مجاز
+    const payload = {
+      name: warehouseData.name?.trim(),
+      location: warehouseData.location?.trim() || null
+    }
     const { data: inserted, error } = await supabase
       .from('warehouses')
-      .insert([ warehouseData ])
-      .select()
+      .insert([ payload ])
+      .select('id,name,location,created_at')
 
     if (error) {
       return { error }
@@ -413,11 +418,16 @@ export const updateWarehouse = async (id, warehouseData) => {
   }
 
   try {
+    const payload = {
+      name: warehouseData.name?.trim(),
+      location: warehouseData.location?.trim() || null,
+      updated_at: new Date().toISOString()
+    }
     const { data, error } = await supabase
       .from('warehouses')
-      .update({ ...warehouseData, updated_at: new Date().toISOString() })
+      .update(payload)
       .eq('id', id)
-      .select()
+      .select('id,name,location,created_at,updated_at')
 
     if (error) {
       return { error }

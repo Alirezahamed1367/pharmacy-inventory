@@ -49,7 +49,7 @@ const Reports = () => {
   const [expiringMid, setExpiringMid] = useState([])
   const [warehouses, setWarehouses] = useState([])
   const [drugs, setDrugs] = useState([])
-  // const [movements, setMovements] = useState([]) // حرکت داروها - فعلاً غیرفعال
+  const [movements] = useState([]) // حرکات فعلا از view جداگانه خوانده نمی‌شود
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -306,34 +306,7 @@ const Reports = () => {
 
         {/* گزارش حرکات */}
         <TabPanel value={tabValue} index={1}>
-          {movements.length === 0 ? (
-            <Alert severity="info">حرکتی ثبت نشده است.</Alert>
-          ) : (
-            <TableContainer>
-              <Table size='small'>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>نوع</TableCell>
-                    <TableCell>کد</TableCell>
-                    <TableCell>تاریخ سند</TableCell>
-                    <TableCell>تاریخ ایجاد</TableCell>
-                    <TableCell>وضعیت</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {movements.map(m => (
-                    <TableRow key={m.type+"-"+m.id}>
-                      <TableCell>{m.type==='receipt'?'رسید':'حواله'}</TableCell>
-                      <TableCell>{m.id.slice(0,8)}</TableCell>
-                      <TableCell>{m.document_date ? new Date(m.document_date).toLocaleDateString('fa-IR') : '-'}</TableCell>
-                      <TableCell>{new Date(m.created_at).toLocaleDateString('fa-IR')}</TableCell>
-                      <TableCell>{m.status}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
+          <Alert severity="info">گزارش حرکات در نسخه فعلی غیرفعال است.</Alert>
         </TabPanel>
 
         {/* داروهای منقضی */}
