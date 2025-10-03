@@ -11,8 +11,20 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Chip,
   IconButton,
   Avatar,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
   Alert,
 } from '@mui/material'
 import {
@@ -21,6 +33,7 @@ import {
   Delete as DeleteIcon,
   Warehouse as WarehouseIcon,
   LocationOn as LocationIcon,
+  Inventory as InventoryIcon,
   SwapHoriz as TransferIcon,
 } from '@mui/icons-material'
 // TransferDialog حذف شده؛ استفاده از صفحه مستقل Transfers
@@ -106,13 +119,12 @@ export default function WarehouseManagement() {
   const handleSave = async () => {
     try {
       let result
-      const { capacity, ...sanitized } = formData // ظرفیت فعلاً در ساختار دیتابیس وجود ندارد
       if (selectedWarehouse) {
         // ویرایش
-        result = await updateWarehouse(selectedWarehouse.id, sanitized)
+        result = await updateWarehouse(selectedWarehouse.id, formData)
       } else {
         // افزودن
-        result = await addWarehouse(sanitized)
+        result = await addWarehouse(formData)
       }
       
       if (result.error) throw new Error(result.error.message)
@@ -137,7 +149,9 @@ export default function WarehouseManagement() {
     }
   }
 
-  // قابلیت ظرفیت در نسخه فعلی حذف شده است؛ در صورت نیاز آینده می‌توان از جدول یا view مجزا محاسبه کرد
+
+
+  // ظرفیت حذف شده است؛ در صورت نیاز در آینده می‌توان دوباره افزود
 
   return (
     <Box>
@@ -175,54 +189,54 @@ export default function WarehouseManagement() {
 
       {/* Warehouses Grid */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        {warehouses.map((warehouse) => (
-          <Grid item xs={12} md={6} lg={4} key={warehouse.id}>
-            <Card sx={{ height: '100%' }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Avatar sx={{ bgcolor: 'primary.main' }}>
-                      <WarehouseIcon />
-                    </Avatar>
-                    <Box>
-                      <Typography variant="h6" fontWeight="bold">
-                        {warehouse.name}
-                      </Typography>
-                      {warehouse.manager && (
+        {warehouses.map((warehouse) => {
+          return (
+            <Grid item xs={12} md={6} lg={4} key={warehouse.id}>
+              <Card sx={{ height: '100%' }}>
+                <CardContent>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Avatar sx={{ bgcolor: 'primary.main' }}>
+                        <WarehouseIcon />
+                      </Avatar>
+                      <Box>
+                        <Typography variant="h6" fontWeight="bold">
+                          {warehouse.name}
+                        </Typography>
                         <Typography variant="caption" color="text.secondary">
                           مسئول: {warehouse.manager}
                         </Typography>
-                      )}
+                      </Box>
+                    </Box>
+                    <Box>
+                      <IconButton size="small" color="primary" onClick={() => handleOpenDialog(warehouse)}>
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton size="small" color="error" onClick={() => handleDelete(warehouse.id)}>
+                        <DeleteIcon />
+                      </IconButton>
                     </Box>
                   </Box>
-                  <Box>
-                    <IconButton size="small" color="primary" onClick={() => handleOpenDialog(warehouse)}>
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton size="small" color="error" onClick={() => handleDelete(warehouse.id)}>
-                      <DeleteIcon />
-                    </IconButton>
-                  </Box>
-                </Box>
 
-                {warehouse.description && (
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     {warehouse.description}
                   </Typography>
-                )}
 
-                {warehouse.location && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
                     <LocationIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
                     <Typography variant="caption" color="text.secondary">
                       {warehouse.location}
                     </Typography>
                   </Box>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
+
+                  {/* ظرفیت حذف شد */}
+
+                  {/* نمایش داروهای انبار از طریق ویو یا کوئری جداگانه (در صورت نیاز) */}
+                </CardContent>
+              </Card>
+            </Grid>
+          )
+        })}
       </Grid>
 
       {/* Add/Edit Warehouse Dialog */}
@@ -280,7 +294,7 @@ export default function WarehouseManagement() {
               />
             </Grid>
 
-            {/* ظرفیت حذف شد */}
+            {/* فیلد ظرفیت حذف شد */}
           </Grid>
         </DialogContent>
         <DialogActions>
