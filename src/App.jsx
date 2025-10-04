@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, Suspense, lazy } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider, createTheme } from '@mui/material/styles'
 import CssBaseline from '@mui/material/CssBaseline'
@@ -10,7 +10,6 @@ import { CacheProvider } from '@emotion/react'
 import createCache from '@emotion/cache'
 
 // import { supabase } from './services/supabase' // غیرفعال برای تست محلی
-import React, { Suspense, lazy } from 'react'
 const LoginPage = lazy(()=> import('./pages/LoginPage'))
 const Dashboard = lazy(()=> import('./pages/Dashboard'))
 const DrugManagement = lazy(()=> import('./pages/DrugManagement'))
