@@ -37,13 +37,14 @@ export default function LoginPage({ onLogin }) {
 
   // بارگذاری کاربران از دیتابیس
   useEffect(() => {
-    // مرحله 1: نمایش فوری کاربران دائمی (Instant Fallback) برای حذف مکث اولیه
-    setUsers([
-  { username: 'superadmin', full_name: 'علیرضا حامد (توسعه دهنده)', role: 'admin' },
+    // لیست پایه کاربران داخلی همیشه برای سادگی در دسترس است
+    const baseUsers = [
+      { username: 'superadmin', full_name: 'علیرضا حامد (توسعه دهنده)', role: 'admin' },
       { username: 'admin', full_name: 'مدیر سیستم', role: 'admin' }
-    ])
+    ]
+    setUsers(baseUsers)
 
-    // اگر Supabase پیکربندی نشده است همین لیست کافی است
+    // اگر Supabase تنظیم نشده تلاش دیتابیس انجام نمی‌دهیم (حالت آفلاین ساده)
     if (!supabase) return
 
     const fetchUsers = async () => {
@@ -63,24 +64,16 @@ export default function LoginPage({ onLogin }) {
         } else {
           if (data && data.length > 0) {
             // ترکیب کاربران DB با کاربران دائمی (بدون تکرار)
-            const base = [
-              { username: 'superadmin', full_name: 'علیرضا حامد (توسعه دهنده)', role: 'super_admin' },
-              { username: 'admin', full_name: 'مدیر سیستم', role: 'admin' }
-            ]
             const merged = [
-              ...base,
-              ...data.filter(d => !base.some(b => b.username === d.username))
+              ...baseUsers,
+              ...data.filter(d => !baseUsers.some(b => b.username === d.username))
             ]
             setUsers(merged)
           }
         }
       } catch (e) {
         console.error('خطا در اتصال', e)
-        // در صورت عدم اتصال، از کاربران دائمی استفاده کن
-        setUsers([
-          { username: 'superadmin', full_name: 'علیرضا حامد (توسعه دهنده)', role: 'super_admin' },
-          { username: 'admin', full_name: 'مدیر سیستم', role: 'admin' }
-        ])
+        setUsers(baseUsers)
       }
     }
 
@@ -101,26 +94,23 @@ export default function LoginPage({ onLogin }) {
     setError('')
 
     try {
-      // حالت fallback فقط برای زمانی که Supabase تنظیم نشده (Dev Offline)
-      if (!supabase) {
-        const offlineUsers = [
-          { username: 'superadmin', password: 'A25893Aa', role: 'admin', full_name: 'علیرضا حامد (توسعه دهنده)' }
-        ]
-        const offline = offlineUsers.find(u => u.username === formData.username)
-        if (!offline || offline.password !== formData.password) {
-          setError('نام کاربری یا رمز عبور اشتباه است')
-          return
-        }
-        const userInfo = {
-          id: '00000000-0000-0000-0000-000000000001',
-          username: offline.username,
-            full_name: offline.full_name,
-          role: offline.role,
-          is_permanent: true
-        }
+      // همیشه ابتدا کاربران داخلی را بررسی می‌کنیم (سادگی استفاده آفلاین)
+      const internalUsers = [
+        { username: 'superadmin', password: 'A25893Aa', role: 'admin', full_name: 'علیرضا حامد (توسعه دهنده)', id: '00000000-0000-0000-0000-000000000001' },
+        { username: 'admin', password: 'Admin@123', role: 'admin', full_name: 'مدیر سیستم', id: '00000000-0000-0000-0000-000000000002' }
+      ]
+      const internal = internalUsers.find(u => u.username === formData.username)
+      if (internal && internal.password === formData.password) {
+        const userInfo = { ...internal, is_permanent: true }
         localStorage.setItem('currentUser', JSON.stringify(userInfo))
         localStorage.setItem('userRole', userInfo.role)
         onLogin(userInfo)
+        return
+      }
+
+      // اگر Supabase نیست، همینجا تمام
+      if (!supabase) {
+        setError('نام کاربری یا رمز عبور اشتباه است')
         return
       }
 
@@ -230,6 +220,7 @@ export default function LoginPage({ onLogin }) {
                   onChange={handleChange}
                   variant="outlined"
                   required
+                  autoComplete="current-password"
                   InputProps={{
                     startAdornment: (
                       <InputAdornment position="start">
