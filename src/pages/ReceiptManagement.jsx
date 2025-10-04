@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Box, Typography, Card, CardContent, Button, Grid, Alert, Chip, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField } from '@mui/material'
 import { Add as AddIcon, Check as CheckIcon, Delete as DeleteIcon, Inventory as InventoryIcon, HourglassEmpty as PendingIcon } from '@mui/icons-material'
-import { getReceipts, createReceipt, completeReceipt, getReceiptItems, getDrugs, getAllWarehouses, deleteReceipt } from '../services/supabase'
+import { getReceipts, createReceipt, completeReceipt, getReceiptItems, getDrugs, getAllWarehouses, deleteReceipt, updateReceipt, updateReceiptItem, addReceiptItem, deleteReceiptItem } from '../services/supabase'
 import { supabase } from '../services/supabase'
 import { formatDMY } from '../utils/dateUtils'
 
@@ -11,6 +11,7 @@ const ReceiptManagement = () => {
   const [error, setError] = useState(null)
   const [openNew, setOpenNew] = useState(false)
   const [openItems, setOpenItems] = useState(false)
+  const [editingHeader, setEditingHeader] = useState(false)
   const [currentReceipt, setCurrentReceipt] = useState(null)
   const [drugs, setDrugs] = useState([])
   const [warehouses, setWarehouses] = useState([])
@@ -99,6 +100,41 @@ const ReceiptManagement = () => {
     setOpenItems(true)
     const { data, error: itErr } = await getReceiptItems(receipt.id)
     if (!itErr) setItems(data)
+  }
+
+  const handleUpdateHeader = async () => {
+    if (!currentReceipt) return
+    const patch = { destination_warehouse_id: form.destination_warehouse_id || undefined, supplier_id: form.supplier_id || undefined, notes: form.notes || undefined, document_date: form.document_date || undefined }
+    const { error: uErr } = await updateReceipt(currentReceipt.id, patch)
+    if (uErr) { setError(uErr.message); return }
+    setEditingHeader(false)
+    loadData()
+  }
+
+  const handleAddItemToExisting = async () => {
+    if (!currentReceipt || currentReceipt.status !== 'pending') return
+    if (!newItem.drug_id || !newItem.quantity) return
+    const { error: addErr } = await addReceiptItem(currentReceipt.id, { drug_id: newItem.drug_id, quantity: Number(newItem.quantity), supplier_id: newItem.supplier_id || null })
+    if (addErr) { setError(addErr.message); return }
+    setNewItem({ drug_id:'', quantity:'', supplier_id:'' })
+    const { data } = await getReceiptItems(currentReceipt.id)
+    setItems(data)
+  }
+
+  const handleUpdateItemQty = async (it, qty) => {
+    if (!it.id) return
+    const { error: upErr } = await updateReceiptItem(it.id, { quantity: Number(qty) })
+    if (upErr) { setError(upErr.message); return }
+    const { data } = await getReceiptItems(currentReceipt.id)
+    setItems(data)
+  }
+
+  const handleDeleteItem = async (it) => {
+    if (!window.confirm('حذف آیتم؟')) return
+    const { error: dErr } = await deleteReceiptItem(it.id)
+    if (dErr) { setError(dErr.message); return }
+    const { data } = await getReceiptItems(currentReceipt.id)
+    setItems(data)
   }
 
   const addTempItem = () => {
@@ -271,35 +307,105 @@ const ReceiptManagement = () => {
       </Dialog>
 
       {/* Dialog: Receipt Items (view existing) */}
-      <Dialog open={openItems} onClose={()=>{setOpenItems(false); setCurrentReceipt(null);}} maxWidth='md' fullWidth>
-        <DialogTitle>آیتم‌های رسید</DialogTitle>
+      <Dialog open={openItems} onClose={()=>{setOpenItems(false); setCurrentReceipt(null); setEditingHeader(false);}} maxWidth='md' fullWidth>
+        <DialogTitle>
+          آیتم‌های رسید
+          {currentReceipt?.status==='pending' && (
+            <Button size='small' sx={{ ml:2 }} onClick={()=> setEditingHeader(h=>!h)}>{editingHeader? 'انصراف ویرایش هدر':'ویرایش هدر'}</Button>
+          )}
+        </DialogTitle>
         <DialogContent dividers>
           {currentReceipt && (
-            <Table size='small'>
-              <TableHead>
-                <TableRow>
-                  <TableCell>دارو</TableCell>
-                  <TableCell>انقضا</TableCell>
-                  <TableCell>تعداد</TableCell>
-                  {/* حذف ستون بچ */}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {items.map(it => (
-                  <TableRow key={it.id}>
-                    <TableCell>{it.drugs?.name}</TableCell>
-                    <TableCell>{formatDMY(it.drugs?.expire_date)}</TableCell>
-                    <TableCell>{it.quantity}</TableCell>
-                    {/* حذف مقدار بچ */}
+            <>
+              {editingHeader && currentReceipt.status==='pending' && (
+                <Box sx={{ mb:2 }}>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={4}>
+                      <TextField select SelectProps={{ native:true }} label='انبار مقصد' fullWidth value={form.destination_warehouse_id} onChange={e=>setForm(f=>({...f,destination_warehouse_id:e.target.value}))}>
+                        <option value=''>انتخاب...</option>
+                        {warehouses.map(w=> <option key={w.id} value={w.id}>{w.name}</option> )}
+                      </TextField>
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <TextField select SelectProps={{ native:true }} label='تامین‌کننده' fullWidth value={form.supplier_id} onChange={e=>setForm(f=>({...f,supplier_id:e.target.value}))}>
+                        <option value=''>انتخاب...</option>
+                        {suppliers.map(s=> <option key={s.id} value={s.id}>{s.name}</option> )}
+                      </TextField>
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <TextField type='date' label='تاریخ سند' InputLabelProps={{ shrink:true }} fullWidth value={form.document_date} onChange={e=>setForm(f=>({...f,document_date:e.target.value}))} />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <TextField label='یادداشت' fullWidth value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} />
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Button variant='contained' size='small' onClick={handleUpdateHeader}>ذخیره هدر</Button>
+                    </Grid>
+                  </Grid>
+                </Box>
+              )}
+              <Table size='small'>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>دارو</TableCell>
+                    <TableCell>انقضا</TableCell>
+                    <TableCell>تعداد</TableCell>
+                    {currentReceipt.status==='pending' && <TableCell>عملیات</TableCell>}
                   </TableRow>
-                ))}
-                {items.length===0 && <TableRow><TableCell colSpan={4} align='center'>آیتمی ثبت نشده</TableCell></TableRow>}
-              </TableBody>
-            </Table>
+                </TableHead>
+                <TableBody>
+                  {items.map(it => {
+                    const editable = currentReceipt.status==='pending'
+                    return (
+                      <TableRow key={it.id}>
+                        <TableCell>{it.drugs?.name}</TableCell>
+                        <TableCell>{formatDMY(it.drugs?.expire_date)}</TableCell>
+                        <TableCell>
+                          {editable ? (
+                            <TextField type='number' size='small' value={it.quantity} onChange={e=>handleUpdateItemQty(it,e.target.value)} />
+                          ) : it.quantity }
+                        </TableCell>
+                        {editable && (
+                          <TableCell>
+                            <IconButton size='small' color='error' onClick={()=>handleDeleteItem(it)}><DeleteIcon fontSize='small' /></IconButton>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    )
+                  })}
+                  {items.length===0 && <TableRow><TableCell colSpan={currentReceipt.status==='pending'?4:3} align='center'>آیتمی ثبت نشده</TableCell></TableRow>}
+                </TableBody>
+              </Table>
+              {currentReceipt.status==='pending' && (
+                <Box sx={{ mt:2 }}>
+                  <Typography variant='subtitle2'>افزودن آیتم جدید</Typography>
+                  <Grid container spacing={1} alignItems='center'>
+                    <Grid item xs={12} md={4}>
+                      <TextField select SelectProps={{ native:true }} label='دارو' fullWidth value={newItem.drug_id} onChange={e=>setNewItem(i=>({...i,drug_id:e.target.value}))}>
+                        <option value=''>انتخاب...</option>
+                        {drugs.map(d=> <option key={d.id} value={d.id}>{d.name}</option> )}
+                      </TextField>
+                    </Grid>
+                    <Grid item xs={12} md={2}>
+                      <TextField type='number' label='تعداد' fullWidth value={newItem.quantity} onChange={e=>setNewItem(i=>({...i,quantity:e.target.value}))} />
+                    </Grid>
+                    <Grid item xs={12} md={3}>
+                      <TextField select SelectProps={{ native:true }} label='تامین‌کننده' fullWidth value={newItem.supplier_id} onChange={e=>setNewItem(i=>({...i,supplier_id:e.target.value}))}>
+                        <option value=''>انتخاب...</option>
+                        {suppliers.map(s=> <option key={s.id} value={s.id}>{s.name}</option> )}
+                      </TextField>
+                    </Grid>
+                    <Grid item xs={12} md={2}>
+                      <Button variant='outlined' size='small' disabled={!newItem.drug_id || !newItem.quantity} onClick={handleAddItemToExisting}>افزودن</Button>
+                    </Grid>
+                  </Grid>
+                </Box>
+              )}
+            </>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={()=>{setOpenItems(false); setCurrentReceipt(null);}}>بستن</Button>
+          <Button onClick={()=>{setOpenItems(false); setCurrentReceipt(null); setEditingHeader(false);}}>بستن</Button>
         </DialogActions>
       </Dialog>
     </Box>

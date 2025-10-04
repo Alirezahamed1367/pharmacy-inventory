@@ -40,6 +40,7 @@ import ExpiryChip from '../components/ExpiryChip'
 
 const Reports = () => {
   const [tabValue, setTabValue] = useState(0)
+  const [matrix, setMatrix] = useState({ rows: [], columns: [], data: {} })
   const [selectedWarehouse, setSelectedWarehouse] = useState('')
   // statusFilter حذف شد (نیاز فعلی ندارد)
   const [drugFilter, setDrugFilter] = useState('')
@@ -93,7 +94,7 @@ const Reports = () => {
         warehouse_name: item.warehouse?.name,
         image_url: item.drug?.image_url
       }))
-      setInventory(inventoryData)
+  setInventory(inventoryData)
       setWarehouses(warehousesResult.data || [])
       setDrugs(drugsResult.data || [])
 
@@ -118,6 +119,18 @@ const Reports = () => {
       setExpired(expiredList)
       setExpiringSoon(expiringSoonList)
       setExpiringMid(expiringMidList)
+      // ساخت ماتریس انبار × دارو (جمع موجودی)
+      const uniqueDrugs = Array.from(new Set(inventoryData.map(i=> i.drug_name))).filter(Boolean).sort((a,b)=>a.localeCompare(b,'fa'))
+      const uniqueWarehouses = Array.from(new Set(inventoryData.map(i=> i.warehouse_name))).filter(Boolean).sort((a,b)=>a.localeCompare(b,'fa'))
+      const matrixData = {}
+      for (const d of uniqueDrugs) {
+        for (const w of uniqueWarehouses) {
+          const sum = inventoryData.filter(x=> x.drug_name===d && x.warehouse_name===w).reduce((s,x)=> s + (x.quantity||0),0)
+          if (!matrixData[d]) matrixData[d] = {}
+            matrixData[d][w] = sum
+        }
+      }
+      setMatrix({ rows: uniqueDrugs, columns: uniqueWarehouses, data: matrixData })
       setError(null)
     } catch (error) {
       console.error('خطا در دریافت گزارشات:', error)
@@ -290,6 +303,7 @@ const Reports = () => {
             <Tab icon={<MovementIcon />} label="گزارش حرکات" />
             <Tab icon={<WarningIcon />} label="داروهای منقضی" />
             <Tab icon={<ReportIcon />} label="گزارش انبارها" />
+            <Tab icon={<ReportIcon />} label="ماتریس انبار × دارو" />
           </Tabs>
         </Box>
 
@@ -318,6 +332,49 @@ const Reports = () => {
                     <TableCell><ExpiryChip date={item.expire_date} /></TableCell>
                   </TableRow>
                 ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </TabPanel>
+
+        {/* ماتریس انبار × دارو */}
+        <TabPanel value={tabValue} index={4}>
+          <Typography variant='h6' sx={{ mb:2 }}>ماتریس تجمعی موجودی (جمع تعداد بر اساس دارو و انبار)</Typography>
+          <TableContainer component={Paper}>
+            <Table size='small'>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight:'bold' }}>دارو \ انبار</TableCell>
+                  {matrix.columns.map(col=> <TableCell key={col} sx={{ fontWeight:'bold' }}>{col}</TableCell>)}
+                  <TableCell sx={{ fontWeight:'bold' }}>جمع دارو</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {matrix.rows.map(drugName => {
+                  const rowData = matrix.data[drugName] || {}
+                  const rowSum = matrix.columns.reduce((s,c)=> s + (rowData[c]||0),0)
+                  return (
+                    <TableRow key={drugName}>
+                      <TableCell>{drugName}</TableCell>
+                      {matrix.columns.map(c=> <TableCell key={c}>{rowData[c]||0}</TableCell>)}
+                      <TableCell sx={{ fontWeight:'bold' }}>{rowSum}</TableCell>
+                    </TableRow>
+                  )
+                })}
+                {matrix.rows.length===0 && (
+                  <TableRow><TableCell colSpan={matrix.columns.length + 2} align='center'>داده‌ای وجود ندارد</TableCell></TableRow>
+                )}
+                {/* Footer total per warehouse */}
+                {matrix.rows.length>0 && (
+                  <TableRow>
+                    <TableCell sx={{ fontWeight:'bold' }}>جمع انبار</TableCell>
+                    {matrix.columns.map(c=> {
+                      const sum = matrix.rows.reduce((s,r)=> s + ((matrix.data[r]||{})[c]||0),0)
+                      return <TableCell key={c} sx={{ fontWeight:'bold' }}>{sum}</TableCell>
+                    })}
+                    <TableCell sx={{ fontWeight:'bold' }}>{matrix.rows.reduce((s,r)=> s + matrix.columns.reduce((ss,c)=> ss + ((matrix.data[r]||{})[c]||0),0),0)}</TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </TableContainer>

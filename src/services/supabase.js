@@ -571,11 +571,14 @@ export const getActiveDrugs = async () => {
   }
 
   try {
-    const { data, error } = await supabase
-      .from('drugs')
-      .select('*')
-      .eq('is_active', true)
-      .order('name')
+    // ابتدا تلاش با فیلتر is_active؛ اگر ستون وجود نداشت fallback
+    let query = supabase.from('drugs').select('*')
+    let { data, error } = await query.eq('is_active', true).order('name')
+    if (error && error.message && /column .*is_active.* does not exist/i.test(error.message)) {
+      // پایگاه‌داده هنوز migration را ندارد → بدون فیلتر ادامه بده
+      const retry = await supabase.from('drugs').select('*').order('name')
+      data = retry.data; error = retry.error
+    }
 
     return { data: data || [], error }
   } catch (error) {
@@ -780,6 +783,37 @@ export const deleteReceipt = async (receipt_id) => {
   }
 }
 
+// ویرایش هدر رسید (فقط در pending)
+export const updateReceipt = async (receipt_id, patch) => {
+  if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
+  try {
+    const { data: receipt, error: rErr } = await supabase.from('receipts').select('id,status').eq('id', receipt_id).single()
+    if (rErr || !receipt) return { error: { message: 'رسید یافت نشد' } }
+    if (receipt.status !== 'pending') return { error: { message: 'رسید تکمیل شده قابل ویرایش نیست' } }
+    const allowed = { destination_warehouse_id: patch.destination_warehouse_id, supplier_id: patch.supplier_id, notes: patch.notes, document_date: patch.document_date }
+    const cleaned = Object.fromEntries(Object.entries(allowed).filter(([_,v]) => v !== undefined))
+    if (Object.keys(cleaned).length === 0) return { error: null }
+    const { error } = await supabase.from('receipts').update(cleaned).eq('id', receipt_id)
+    return { error }
+  } catch (e) { return { error: { message: 'خطا در ویرایش رسید: ' + e.message } } }
+}
+
+// ویرایش آیتم رسید (تغییر تعداد یا تامین‌کننده) در pending
+export const updateReceiptItem = async (item_id, patch) => {
+  if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
+  try {
+    const { data: item, error: iErr } = await supabase.from('receipt_items').select('id, receipt_id, quantity, receipts(status)').eq('id', item_id).single()
+    if (iErr || !item) return { error: { message: 'آیتم یافت نشد' } }
+    if (item.receipts?.status !== 'pending') return { error: { message: 'آیتم متعلق به رسید تکمیل‌شده است' } }
+    const cleaned = {}
+    if (patch.quantity !== undefined) cleaned.quantity = patch.quantity
+    if (patch.supplier_id !== undefined) cleaned.supplier_id = patch.supplier_id || null
+    if (Object.keys(cleaned).length === 0) return { error: null }
+    const { error } = await supabase.from('receipt_items').update(cleaned).eq('id', item_id)
+    return { error }
+  } catch (e) { return { error: { message: 'خطا در ویرایش آیتم رسید: ' + e.message } } }
+}
+
 // دریافت آیتم‌های یک رسید
 export const getReceiptItems = async (receipt_id) => {
   if (!supabase) return { data: [], error: null }
@@ -926,6 +960,21 @@ export const deleteTransfer = async (transfer_id) => {
   } catch (e) {
     return { error: { message: 'خطا در حذف حواله: ' + e.message } }
   }
+}
+
+// ویرایش هدر حواله (فقط در in_transit)
+export const updateTransfer = async (transfer_id, patch) => {
+  if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
+  try {
+    const { data: transfer, error: tErr } = await supabase.from('transfers').select('id,status').eq('id', transfer_id).single()
+    if (tErr || !transfer) return { error: { message: 'حواله یافت نشد' } }
+    if (transfer.status !== 'in_transit') return { error: { message: 'حواله تکمیل شده قابل ویرایش نیست' } }
+    const allowed = { notes: patch.notes, document_date: patch.document_date, destination_warehouse_id: patch.destination_warehouse_id }
+    const cleaned = Object.fromEntries(Object.entries(allowed).filter(([_,v]) => v !== undefined))
+    if (Object.keys(cleaned).length === 0) return { error: null }
+    const { error } = await supabase.from('transfers').update(cleaned).eq('id', transfer_id)
+    return { error }
+  } catch (e) { return { error: { message: 'خطا در ویرایش حواله: ' + e.message } } }
 }
 
 // دریافت موجودی lots (برای UI حواله) - فقط رکوردهای دارای quantity>0

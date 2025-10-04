@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Box, Typography, Card, CardContent, Grid, Button, Alert, Table, TableHead, TableBody, TableRow, TableCell, TableContainer, Paper, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Chip, IconButton } from '@mui/material'
 import { Add as AddIcon, CompareArrows as TransferIcon, Check as CheckIcon, Error as ErrorIcon } from '@mui/icons-material'
-import { getTransfers, createTransfer, completeTransfer, getTransferItems, getAllWarehouses, getAllLotInventory, deleteTransfer } from '../services/supabase'
+import { getTransfers, createTransfer, completeTransfer, getTransferItems, getAllWarehouses, getAllLotInventory, deleteTransfer, updateTransfer } from '../services/supabase'
 import { formatDMY } from '../utils/dateUtils'
 
 // Helper status chip
@@ -21,6 +21,7 @@ const Transfers = () => {
   const [openNew, setOpenNew] = useState(false)
   const [openComplete, setOpenComplete] = useState(false)
   const [currentTransfer, setCurrentTransfer] = useState(null)
+  const [openEdit, setOpenEdit] = useState(false)
   const [form, setForm] = useState({ source_warehouse_id: '', destination_warehouse_id: '', notes: '', document_date: new Date().toISOString().slice(0,10) })
   const [items, setItems] = useState([])
   const [newItem, setNewItem] = useState({ inventory_id: '', quantity_sent: '' })
@@ -102,6 +103,31 @@ const Transfers = () => {
     }
   }
 
+  const openEditDialog = (transfer) => {
+    setCurrentTransfer(transfer)
+    setForm({
+      source_warehouse_id: transfer.source_warehouse_id,
+      destination_warehouse_id: transfer.destination_warehouse_id,
+      notes: transfer.notes || '',
+      document_date: transfer.document_date || new Date().toISOString().slice(0,10)
+    })
+    setOpenEdit(true)
+  }
+
+  const submitEdit = async () => {
+    if (!currentTransfer) return
+    const patch = {
+      destination_warehouse_id: form.destination_warehouse_id || undefined,
+      notes: form.notes || undefined,
+      document_date: form.document_date || undefined
+    }
+    const { error: uErr } = await updateTransfer(currentTransfer.id, patch)
+    if (uErr) { setError(uErr.message); return }
+    setOpenEdit(false)
+    setCurrentTransfer(null)
+    loadAll()
+  }
+
   const updateCompleteItem = (idx, patch) => {
     setCompleteItems(prev => prev.map((it,i)=> i===idx ? { ...it, ...patch } : it ))
   }
@@ -168,6 +194,7 @@ const Transfers = () => {
                       {tr.status==='in_transit' && (
                         <>
                           <Button size='small' variant='outlined' onClick={()=>openCompleteDialog(tr)}>تکمیل</Button>
+                          <Button size='small' sx={{ ml:1 }} variant='outlined' color='secondary' onClick={()=>openEditDialog(tr)}>ویرایش</Button>
                           <Button size='small' sx={{ ml:1 }} variant='outlined' color='error' onClick={async ()=>{
                             if (!window.confirm('حذف این حواله؟')) return
                             const { error: delErr } = await deleteTransfer(tr.id)
@@ -304,6 +331,39 @@ const Transfers = () => {
         <DialogActions>
           <Button onClick={()=>{ setOpenComplete(false); setCurrentTransfer(null); }}>بستن</Button>
           <Button variant='contained' onClick={submitComplete} disabled={completing}>ثبت دریافت</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog: Edit Transfer */}
+      <Dialog open={openEdit} onClose={()=>{ setOpenEdit(false); setCurrentTransfer(null); }} maxWidth='sm' fullWidth>
+        <DialogTitle>ویرایش حواله</DialogTitle>
+        <DialogContent dividers>
+          {currentTransfer && (
+            <Grid container spacing={2}>
+              <Grid item xs={12}>
+                <Alert severity='info'>فقط فیلدهای هدر قابل ویرایش هستند؛ آیتم‌ها در این نسخه قابل ویرایش نیستند.</Alert>
+              </Grid>
+              <Grid item xs={12}>
+                <TextField label='کد حواله' fullWidth value={currentTransfer.id} InputProps={{ readOnly:true }} />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField select SelectProps={{ native:true }} label='انبار مقصد' fullWidth value={form.destination_warehouse_id} onChange={e=>setForm(f=>({...f,destination_warehouse_id:e.target.value}))}>
+                  <option value=''>انتخاب...</option>
+                  {warehouses.filter(w=> w.id!==currentTransfer.source_warehouse_id).map(w=> <option key={w.id} value={w.id}>{w.name}</option> )}
+                </TextField>
+              </Grid>
+              <Grid item xs={12}>
+                <TextField label='یادداشت' fullWidth multiline minRows={2} value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField type='date' label='تاریخ سند' InputLabelProps={{ shrink:true }} fullWidth value={form.document_date} onChange={e=>setForm(f=>({...f,document_date:e.target.value}))} />
+              </Grid>
+            </Grid>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={()=>{ setOpenEdit(false); setCurrentTransfer(null); }}>بستن</Button>
+          <Button variant='contained' onClick={submitEdit}>ذخیره تغییرات</Button>
         </DialogActions>
       </Dialog>
     </Box>
