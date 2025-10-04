@@ -329,6 +329,9 @@ export const deleteDrug = async (id) => {
   }
 
   try {
+    // واکشی رکورد برای دسترسی به تصویر
+    const { data: drugRow, error: fetchErr } = await supabase.from('drugs').select('id,image_url').eq('id', id).single()
+    if (fetchErr) return { error: { message: 'خطا در یافتن دارو: ' + translateDbError(fetchErr.message) } }
     // قبل از حذف بررسی می‌کنیم آیا رکورد در موجودی یا اسناد استفاده شده است
     // 1. موجودی
     const { data: invRef, error: invErr } = await supabase.from('inventory').select('id').eq('drug_id', id).limit(1)
@@ -349,7 +352,18 @@ export const deleteDrug = async (id) => {
       .from('drugs')
       .delete()
       .eq('id', id)
-
+    if (!error && drugRow?.image_url) {
+      try {
+        // استخراج مسیر نسبی داخل باکت
+        const marker = '/drug-images/'
+        if (drugRow.image_url.includes(marker)) {
+          const relative = drugRow.image_url.split(marker)[1] // drugs/filename.ext یا فقط filename
+          // اگر مسیر شامل 'drugs/' نبود اضافه می‌کنیم
+          const path = relative.startsWith('drugs/') ? relative : 'drugs/' + relative
+          await supabase.storage.from('drug-images').remove([path])
+        }
+      } catch (_) { /* عدم موفقیت حذف تصویر بحرانی نیست */ }
+    }
     return { error }
   } catch (error) {
     return { error: { message: translateDbError(error.message) } }

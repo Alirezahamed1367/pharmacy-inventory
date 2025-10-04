@@ -3,14 +3,14 @@
 
 # Quick Vercel Deployment
 $projectName = "pharmacy-inventory-system"
-$buildCommand = "npm run build"
+## Removed variable indirection to satisfy analyzer (direct call) - was: $buildCommand = "npm run build"
 
 Write-Host "🚀 Starting deployment process for $projectName..." -ForegroundColor Green
 
 # Check if project has been built
 if (!(Test-Path "dist")) {
     Write-Host "📦 Building project..." -ForegroundColor Yellow
-    & npm run build
+    npm run build
     if ($LASTEXITCODE -ne 0) {
         Write-Host "❌ Build failed!" -ForegroundColor Red
         exit 1
