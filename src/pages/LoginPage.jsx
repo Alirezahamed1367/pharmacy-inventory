@@ -101,23 +101,21 @@ export default function LoginPage({ onLogin }) {
     setError('')
 
     try {
-      // کاربران دائمی سیستم (غیر قابل تغییر)
-      const permanentUsers = [
-        { username: 'superadmin', password: 'A25893Aa', role: 'admin', full_name: 'علیرضا حامد (توسعه دهنده)' },
-        { username: 'admin', password: 'password', role: 'admin', full_name: 'مدیر سیستم' }
-      ]
-
-      const permanent = permanentUsers.find(u => u.username === formData.username)
-      if (permanent) {
-        if (permanent.password !== formData.password) {
-          setError('رمز عبور نادرست است')
+      // حالت fallback فقط برای زمانی که Supabase تنظیم نشده (Dev Offline)
+      if (!supabase) {
+        const offlineUsers = [
+          { username: 'superadmin', password: 'A25893Aa', role: 'admin', full_name: 'علیرضا حامد (توسعه دهنده)' }
+        ]
+        const offline = offlineUsers.find(u => u.username === formData.username)
+        if (!offline || offline.password !== formData.password) {
+          setError('نام کاربری یا رمز عبور اشتباه است')
           return
         }
         const userInfo = {
-          id: permanent.username === 'superadmin' ? '00000000-0000-0000-0000-000000000001' : '00000000-0000-0000-0000-000000000002',
-          username: permanent.username,
-          full_name: permanent.full_name,
-          role: permanent.role,
+          id: '00000000-0000-0000-0000-000000000001',
+          username: offline.username,
+            full_name: offline.full_name,
+          role: offline.role,
           is_permanent: true
         }
         localStorage.setItem('currentUser', JSON.stringify(userInfo))
@@ -126,11 +124,6 @@ export default function LoginPage({ onLogin }) {
         return
       }
 
-      // اگر کاربر دائمی نیست ولی Supabase پیکربندی نشده، خطا بده
-      if (!supabase) {
-        setError('سرور احراز هویت در دسترس نیست')
-        return
-      }
       // احراز هویت از دیتابیس
       const result = await signIn(formData.username, formData.password)
       if (result.error || !result.data?.user) {
