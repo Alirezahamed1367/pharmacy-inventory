@@ -34,7 +34,7 @@ import {
   SwapHoriz as MovementIcon,
   Warning as WarningIcon,
 } from '@mui/icons-material'
-import { getInventoryDetailed, getWarehouses, getActiveDrugs, isBackendAvailable } from '../services/supabase'
+import { getInventoryDetailed, getWarehouses, getActiveDrugs, isBackendAvailable, getExpiryReport } from '../services/supabase'
 import Skeleton from '@mui/material/Skeleton'
 import ExpiryChip from '../components/ExpiryChip'
 
@@ -46,6 +46,7 @@ const Reports = () => {
   const [drugFilter, setDrugFilter] = useState('')
   const [selectedDrugForWarehouse, setSelectedDrugForWarehouse] = useState('')
   const [inventory, setInventory] = useState([])
+  const [expiryLots, setExpiryLots] = useState([])
   const [expired, setExpired] = useState([])
   const [expiringSoon, setExpiringSoon] = useState([])
   const [expiringMid, setExpiringMid] = useState([])
@@ -76,25 +77,29 @@ const Reports = () => {
   const fetchReportsData = async () => {
     setLoading(true)
     try {
-      const [inventoryResult, warehousesResult, drugsResult] = await Promise.all([
+      const [inventoryResult, warehousesResult, drugsResult, expiryReportRes] = await Promise.all([
         getInventoryDetailed(),
         getWarehouses(),
-        getActiveDrugs()
+        getActiveDrugs(),
+        getExpiryReport()
       ])
       if (inventoryResult.error) throw new Error(inventoryResult.error.message)
       if (warehousesResult.error) throw new Error(warehousesResult.error.message)
       if (drugsResult.error) throw new Error(drugsResult.error.message)
+      if (expiryReportRes.error) throw new Error(expiryReportRes.error.message)
 
       const inventoryData = (inventoryResult.data || []).map(item => ({
         ...item,
         drug_name: item.drug?.name,
-        // استانداردسازی فیلد انقضا: فقط expire_date استفاده شود
-        expire_date: item.drug?.expire_date || item.expire_date || item.lot?.expire_date || null,
+        // اولویت با lot.expire_date سپس drug.expire_date (legacy)
+        expire_date: item.lot?.expire_date || item.drug?.expire_date || null,
+        lot_number: item.lot?.lot_number || null,
         package_type: item.drug?.package_type,
         warehouse_name: item.warehouse?.name,
         image_url: item.drug?.image_url
       }))
   setInventory(inventoryData)
+      setExpiryLots(expiryReportRes.data || [])
       setWarehouses(warehousesResult.data || [])
       setDrugs(drugsResult.data || [])
 
@@ -304,6 +309,7 @@ const Reports = () => {
             <Tab icon={<WarningIcon />} label="داروهای منقضی" />
             <Tab icon={<ReportIcon />} label="گزارش انبارها" />
             <Tab icon={<ReportIcon />} label="ماتریس انبار × دارو" />
+            <Tab icon={<WarningIcon />} label="تجمیع انقضا (لات)" />
           </Tabs>
         </Box>
 
@@ -375,6 +381,45 @@ const Reports = () => {
                     <TableCell sx={{ fontWeight:'bold' }}>{matrix.rows.reduce((s,r)=> s + matrix.columns.reduce((ss,c)=> ss + ((matrix.data[r]||{})[c]||0),0),0)}</TableCell>
                   </TableRow>
                 )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </TabPanel>
+
+        {/* گزارش تجمیعی انقضا بر اساس لات */}
+        <TabPanel value={tabValue} index={5}>
+          <Typography variant='h6' sx={{ mb:2 }}>گزارش تجمیعی انقضا (سطح لات)</Typography>
+          <Alert severity='info' sx={{ mb:2 }}>این گزارش بر اساس مجموع مقادیر هر لات (دارو + تاریخ انقضا + شماره بچ) محاسبه شده است.</Alert>
+          <TableContainer component={Paper}>
+            <Table size='small'>
+              <TableHead>
+                <TableRow>
+                  <TableCell>نام دارو</TableCell>
+                  <TableCell>نوع بسته بندی</TableCell>
+                  <TableCell>تاریخ انقضا</TableCell>
+                  <TableCell>شماره بچ</TableCell>
+                  <TableCell>موجودی کل</TableCell>
+                  <TableCell>روز تا انقضا</TableCell>
+                  <TableCell>وضعیت</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {expiryLots.map((lot,idx)=>{
+                  const today = new Date(); const exp = lot.expire_date ? new Date(lot.expire_date) : null
+                  const diffDays = exp ? Math.ceil((exp - today)/(1000*60*60*24)) : null
+                  return (
+                    <TableRow key={idx}>
+                      <TableCell>{lot.drug_name}</TableCell>
+                      <TableCell>{lot.package_type || '-'}</TableCell>
+                      <TableCell>{lot.expire_date ? new Date(lot.expire_date).toLocaleDateString('fa-IR') : '-'}</TableCell>
+                      <TableCell>{lot.lot_number || '-'}</TableCell>
+                      <TableCell>{lot.total_quantity}</TableCell>
+                      <TableCell>{diffDays!==null ? (diffDays>=0? diffDays + ' روز' : Math.abs(diffDays)+'-') : '-'}</TableCell>
+                      <TableCell><ExpiryChip date={lot.expire_date} /></TableCell>
+                    </TableRow>
+                  )
+                })}
+                {expiryLots.length===0 && <TableRow><TableCell colSpan={7} align='center'>داده‌ای وجود ندارد</TableCell></TableRow>}
               </TableBody>
             </Table>
           </TableContainer>

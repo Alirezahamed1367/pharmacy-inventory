@@ -246,7 +246,7 @@ const Transfers = () => {
                       .sort((a,b)=> new Date(a.lot?.expire_date || a.expire_date || a.drug_expire_date || '2100-01-01') - new Date(b.lot?.expire_date || b.expire_date || b.drug_expire_date || '2100-01-01'))
                       .map(inv=> {
                         const drugName = inv.drugs?.name || inv.drug_name || inv.name
-                        const exp = inv.lot?.expire_date || inv.expire_date || inv.drug_expire_date || '----'
+                        const exp = inv.lot?.expire_date || inv.expire_date || '----'
                         const lotNumber = inv.lot?.lot_number || inv.lot_number || inv.batch_number || 'بدون بچ'
                         return <option key={inv.id} value={inv.id}>{drugName} - {exp} - {lotNumber} - موجودی:{inv.quantity}</option>
                       })}
@@ -275,7 +275,7 @@ const Transfers = () => {
                     return (
                       <TableRow key={idx}>
                         <TableCell>{inv?.drugs?.name || inv?.drug_name || inv?.name}</TableCell>
-                        <TableCell>{formatDMY(inv?.lot?.expire_date || inv?.expire_date || inv?.drug_expire_date)}</TableCell>
+                        <TableCell>{formatDMY(inv?.lot?.expire_date || inv?.expire_date)}</TableCell>
                         <TableCell>{inv?.lot?.lot_number || inv?.lot_number || inv?.batch_number || '-'}</TableCell>
                         <TableCell>{it.quantity_sent}</TableCell>
                         <TableCell><IconButton color='error' size='small' onClick={()=>removeTempItem(idx)}>✕</IconButton></TableCell>

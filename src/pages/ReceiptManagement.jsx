@@ -20,7 +20,7 @@ const ReceiptManagement = () => {
   const [form, setForm] = useState({ destination_warehouse_id: '', supplier_id: '', notes: '', document_date: new Date().toISOString().slice(0,10) })
   const [suppliers, setSuppliers] = useState([])
   const [items, setItems] = useState([]) // temp items before create
-  const [newItem, setNewItem] = useState({ drug_id: '', quantity: '', supplier_id: '' })
+  const [newItem, setNewItem] = useState({ drug_id: '', quantity: '', supplier_id: '', expire_date: '', batch_number: '' })
   const [creating, setCreating] = useState(false)
   const [completing, setCompleting] = useState(false)
 
@@ -54,7 +54,7 @@ const ReceiptManagement = () => {
   const resetForm = () => {
     setForm({ destination_warehouse_id: '', supplier_id: '', notes: '', document_date: new Date().toISOString().slice(0,10) })
     setItems([])
-  setNewItem({ drug_id: '', quantity: '', supplier_id: '' })
+  setNewItem({ drug_id: '', quantity: '', supplier_id: '', expire_date: '', batch_number: '' })
   }
 
   const handleCreateReceipt = async () => {
@@ -69,7 +69,7 @@ const ReceiptManagement = () => {
         supplier_id: form.supplier_id || null,
         notes: form.notes || null,
         document_date: form.document_date,
-  items: items.map(i => ({ drug_id: i.drug_id, quantity: Number(i.quantity), supplier_id: i.supplier_id || null }))
+  items: items.map(i => ({ drug_id: i.drug_id, quantity: Number(i.quantity), supplier_id: i.supplier_id || null, expire_date: i.expire_date, batch_number: i.batch_number || null }))
       }
       const { error: cErr } = await createReceipt(payload)
       if (cErr) throw new Error(cErr.message)
@@ -119,10 +119,10 @@ const ReceiptManagement = () => {
 
   const handleAddItemToExisting = async () => {
     if (!currentReceipt || currentReceipt.status !== 'pending') return
-    if (!newItem.drug_id || !newItem.quantity) return
-    const { error: addErr } = await addReceiptItem(currentReceipt.id, { drug_id: newItem.drug_id, quantity: Number(newItem.quantity), supplier_id: newItem.supplier_id || null })
+    if (!newItem.drug_id || !newItem.quantity || !newItem.expire_date) { setError('ورود تاریخ انقضا الزامی است'); return }
+    const { error: addErr } = await addReceiptItem(currentReceipt.id, { drug_id: newItem.drug_id, quantity: Number(newItem.quantity), supplier_id: newItem.supplier_id || null, expire_date: newItem.expire_date, batch_number: newItem.batch_number || null })
     if (addErr) { setError(addErr.message); return }
-    setNewItem({ drug_id:'', quantity:'', supplier_id:'' })
+    setNewItem({ drug_id:'', quantity:'', supplier_id:'', expire_date:'', batch_number:'' })
     const { data } = await getReceiptItems(currentReceipt.id)
     setItems(data)
     setDirty(true)
@@ -146,10 +146,13 @@ const ReceiptManagement = () => {
   }
 
   const addTempItem = () => {
-    if (!newItem.drug_id || !newItem.quantity) return
+    if (!newItem.drug_id || !newItem.quantity || !newItem.expire_date) { setError('تاریخ انقضا الزامی است'); return }
+    // prevent duplicate same drug + expire + batch in temp list
+    const dup = items.find(it => it.drug_id === newItem.drug_id && it.expire_date === newItem.expire_date && (it.batch_number||'') === (newItem.batch_number||''))
+    if (dup) { setError('این ترکیب (دارو/انقضا/بچ) قبلا اضافه شده است'); return }
     setItems(prev => [...prev, newItem])
     setDirty(true)
-  setNewItem({ drug_id: '', quantity: '', supplier_id: '' })
+  setNewItem({ drug_id: '', quantity: '', supplier_id: '', expire_date: '', batch_number: '' })
   }
 
   const removeTempItem = (idx) => {
@@ -260,16 +263,21 @@ const ReceiptManagement = () => {
             <Grid item xs={12}>
               <Typography variant='subtitle1' fontWeight='bold' sx={{ mt:1 }}>آیتم‌ها</Typography>
               <Grid container spacing={1} alignItems='center' sx={{ mt:1 }}>
-                <Grid item xs={12} md={4}>
-                  <TextField select SelectProps={{ native:true }} label='دارو (نام - انقضا)' fullWidth value={newItem.drug_id} onChange={e=>setNewItem(i=>({...i,drug_id:e.target.value}))}>
+                <Grid item xs={12} md={3}>
+                  <TextField select SelectProps={{ native:true }} label='دارو' fullWidth value={newItem.drug_id} onChange={e=>setNewItem(i=>({...i,drug_id:e.target.value}))}>
                     <option value=''>انتخاب...</option>
-                    {drugs.map(d=> <option key={d.id} value={d.id}>{d.name} - {d.expire_date}</option> )}
+                    {drugs.map(d=> <option key={d.id} value={d.id}>{d.name}</option> )}
                   </TextField>
+                </Grid>
+                <Grid item xs={12} md={2}>
+                  <TextField type='date' label='انقضا' InputLabelProps={{ shrink:true }} fullWidth value={newItem.expire_date} onChange={e=>setNewItem(i=>({...i,expire_date:e.target.value}))} />
                 </Grid>
                 <Grid item xs={12} md={2}>
                   <TextField label='تعداد' type='number' fullWidth value={newItem.quantity} onChange={e=>setNewItem(i=>({...i,quantity:e.target.value}))} />
                 </Grid>
-                {/* حذف فیلد بچ */}
+                <Grid item xs={12} md={2}>
+                  <TextField label='شماره بچ (اختیاری)' fullWidth value={newItem.batch_number} onChange={e=>setNewItem(i=>({...i,batch_number:e.target.value}))} />
+                </Grid>
                 <Grid item xs={12} md={2}>
                   <TextField select SelectProps={{ native:true }} label='تامین‌کننده (اختیاری)' fullWidth value={newItem.supplier_id} onChange={e=>setNewItem(i=>({...i,supplier_id:e.target.value}))}>
                     <option value=''>انتخاب...</option>
@@ -277,7 +285,7 @@ const ReceiptManagement = () => {
                   </TextField>
                 </Grid>
                 <Grid item xs={12} md={1}>
-                  <Button onClick={addTempItem} disabled={!newItem.drug_id || !newItem.quantity}>افزودن</Button>
+                  <Button onClick={addTempItem} disabled={!newItem.drug_id || !newItem.quantity || !newItem.expire_date}>افزودن</Button>
                 </Grid>
               </Grid>
               <Table size='small' sx={{ mt:2 }}>
@@ -285,6 +293,7 @@ const ReceiptManagement = () => {
                   <TableRow>
                     <TableCell>دارو</TableCell>
                     <TableCell>انقضا</TableCell>
+                    <TableCell>شماره بچ</TableCell>
                     <TableCell>تعداد</TableCell>
                     {/* حذف ستون بچ */}
                     {/* حذف ستون انقضا آیتم */}
@@ -298,7 +307,8 @@ const ReceiptManagement = () => {
                     return (
                       <TableRow key={idx}>
                         <TableCell>{drug?.name}</TableCell>
-                        <TableCell>{formatDMY(drug?.expire_date)}</TableCell>
+                        <TableCell>{it.expire_date ? formatDMY(it.expire_date) : '-'}</TableCell>
+                        <TableCell>{it.batch_number || '-'}</TableCell>
                         <TableCell>{it.quantity}</TableCell>
                         {/* حذف مقدار بچ */}
                         {/* ستون حذف شده */}
@@ -307,7 +317,7 @@ const ReceiptManagement = () => {
                       </TableRow>
                     )
                   })}
-                  {items.length===0 && <TableRow><TableCell colSpan={6} align='center'>آیتمی اضافه نشده است</TableCell></TableRow>}
+                  {items.length===0 && <TableRow><TableCell colSpan={7} align='center'>آیتمی اضافه نشده است</TableCell></TableRow>}
                 </TableBody>
               </Table>
             </Grid>
@@ -402,23 +412,29 @@ const ReceiptManagement = () => {
                     <Grid item xs={12} md={3}>
                       <TextField label='جستجوی دارو' size='small' fullWidth value={drugSearch} onChange={e=>setDrugSearch(e.target.value)} />
                     </Grid>
-                    <Grid item xs={12} md={4}>
+                    <Grid item xs={12} md={3}>
                       <TextField select SelectProps={{ native:true }} label='دارو' fullWidth value={newItem.drug_id} onChange={e=>setNewItem(i=>({...i,drug_id:e.target.value}))}>
                         <option value=''>انتخاب...</option>
                         {drugs.filter(d=> d.name.toLowerCase().includes(drugSearch.toLowerCase())).map(d=> <option key={d.id} value={d.id}>{d.name}</option> )}
                       </TextField>
                     </Grid>
                     <Grid item xs={12} md={2}>
+                      <TextField type='date' label='انقضا' InputLabelProps={{ shrink:true }} fullWidth value={newItem.expire_date} onChange={e=>setNewItem(i=>({...i,expire_date:e.target.value}))} />
+                    </Grid>
+                    <Grid item xs={12} md={2}>
                       <TextField type='number' label='تعداد' fullWidth value={newItem.quantity} onChange={e=>setNewItem(i=>({...i,quantity:e.target.value}))} />
                     </Grid>
-                    <Grid item xs={12} md={3}>
+                    <Grid item xs={12} md={2}>
+                      <TextField label='شماره بچ (اختیاری)' fullWidth value={newItem.batch_number} onChange={e=>setNewItem(i=>({...i,batch_number:e.target.value}))} />
+                    </Grid>
+                    <Grid item xs={12} md={2}>
                       <TextField select SelectProps={{ native:true }} label='تامین‌کننده' fullWidth value={newItem.supplier_id} onChange={e=>setNewItem(i=>({...i,supplier_id:e.target.value}))}>
                         <option value=''>انتخاب...</option>
                         {suppliers.map(s=> <option key={s.id} value={s.id}>{s.name}</option> )}
                       </TextField>
                     </Grid>
                     <Grid item xs={12} md={2}>
-                      <Button variant='outlined' size='small' disabled={!newItem.drug_id || !newItem.quantity} onClick={handleAddItemToExisting}>افزودن</Button>
+                      <Button variant='outlined' size='small' disabled={!newItem.drug_id || !newItem.quantity || !newItem.expire_date} onClick={handleAddItemToExisting}>افزودن</Button>
                     </Grid>
                   </Grid>
                 </Box>

@@ -63,7 +63,6 @@ const DrugManagement = () => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    expire_dmy: '', // فرم نمایش DD/MM/YYYY
     package_type: '',
     image_url: '',
     is_active: true
@@ -89,7 +88,6 @@ const DrugManagement = () => {
     setFormData({
       name: '',
       description: '',
-      expire_dmy: '',
       package_type: '',
       image_url: '',
       is_active: true
@@ -103,49 +101,20 @@ const DrugManagement = () => {
       setAlert({ type: 'warning', message: offline.message })
       return
     }
-    if (!formData.name || !formData.package_type || !formData.expire_dmy) {
-      setAlert({ type: 'error', message: 'نام، نوع بسته‌بندی و تاریخ انقضا الزامی است' })
+    if (!formData.name || !formData.package_type) {
+      setAlert({ type: 'error', message: 'نام و نوع بسته‌بندی الزامی است' })
       return
     }
-    // اعتبارسنجی فرمت DD/MM/YYYY و منطق تاریخ
-    const regex = /^\d{2}\/\d{2}\/\d{4}$/
-    if (!regex.test(formData.expire_dmy)) {
-      setAlert({ type: 'error', message: 'فرمت تاریخ باید DD/MM/YYYY باشد (مثال 25/12/2025)' })
-      return
-    }
-    const [dd, mm, yyyy] = formData.expire_dmy.split('/')
-    const dayNum = Number(dd), monNum = Number(mm), yearNum = Number(yyyy)
-    if (monNum < 1 || monNum > 12 || dayNum < 1 || dayNum > 31) {
-      setAlert({ type: 'error', message: 'مقادیر روز یا ماه نامعتبر است' })
-      return
-    }
-    const isoExpireTemp = `${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`
-    const dt = new Date(isoExpireTemp)
-    if (isNaN(dt.getTime())) {
-      setAlert({ type: 'error', message: 'تاریخ نامعتبر است' })
-      return
-    }
-    const today = new Date(); today.setHours(0,0,0,0)
-    if (dt < today) {
-      setAlert({ type: 'error', message: 'تاریخ انقضا نباید گذشته باشد' })
-      return
-    }
-    const isoExpire = parseDMYToISO(formData.expire_dmy)
-    if (!isoExpire) {
-      setAlert({ type: 'error', message: 'فرمت تاریخ صحیح نیست (DD/MM/YYYY)' })
-      return
-    }
-    // بررسی تکراری نبودن ترکیب کلیدی
-  const dup = drugs.find(d => d.name === formData.name && d.package_type === formData.package_type && d.expire_date === isoExpire && (!editingDrug || d.id !== editingDrug.id))
+    // بررسی تکراری نبودن ترکیب (نام + بسته بندی)
+    const dup = drugs.find(d => d.name === formData.name && d.package_type === formData.package_type && (!editingDrug || d.id !== editingDrug.id))
     if (dup) {
-      setAlert({ type: 'error', message: 'این واریانت (نام + بسته‌بندی + تاریخ انقضا) قبلاً وجود دارد' })
+      setAlert({ type: 'error', message: 'این واریانت (نام + بسته‌بندی) قبلاً وجود دارد' })
       return
     }
     setLoading(true)
     try {
-  const payload = { ...formData, expire_date: isoExpire }
-  delete payload.expire_dmy
-  const op = editingDrug ? updateDrug(editingDrug.id, payload) : addDrug(payload)
+      const payload = { ...formData }
+      const op = editingDrug ? updateDrug(editingDrug.id, payload) : addDrug(payload)
       const result = await op
       if (result.error) {
         setAlert({ type: 'error', message: buildUserError(result.error) })
@@ -167,7 +136,6 @@ const DrugManagement = () => {
     setFormData({
       name: drug.name || '',
       description: drug.description || '',
-      expire_dmy: drug.expire_date ? formatDMY(drug.expire_date) : '',
       package_type: drug.package_type || '',
       image_url: drug.image_url || '',
       is_active: drug.is_active !== false
@@ -268,9 +236,8 @@ const DrugManagement = () => {
             <TableRow>
               <TableCell>نام دارو</TableCell>
               <TableCell>توضیحات</TableCell>
-              <TableCell>تاریخ انقضا</TableCell>
-              <TableCell>نوع بسته‌بندی</TableCell>
               <TableCell>تصویر</TableCell>
+              <TableCell>نوع بسته‌بندی</TableCell>
               <TableCell>وضعیت</TableCell>
               <TableCell>عملیات</TableCell>
             </TableRow>
@@ -280,11 +247,6 @@ const DrugManagement = () => {
               <TableRow key={drug.id}>
                 <TableCell>{drug.name}</TableCell>
                 <TableCell>{drug.description || '-'}</TableCell>
-                <TableCell>
-                  {drug.expire_date ? formatDMY(drug.expire_date) : '-'}
-                  <br />{expiryStatus(drug)}
-                </TableCell>
-                <TableCell>{drug.package_type || '-'}</TableCell>
                 <TableCell>
                   {drug.image_url ? (
                     <Box
@@ -317,6 +279,7 @@ const DrugManagement = () => {
                     <ImageIcon color="disabled" />
                   )}
                 </TableCell>
+                <TableCell>{drug.package_type || '-'}</TableCell>
                 <TableCell>
                     {drug.is_active ? <Box component='span' sx={{ color:'success.main', fontWeight:600 }}>فعال</Box> : <Box component='span' sx={{ color:'text.disabled' }}>غیرفعال</Box>}
                   </TableCell>
@@ -374,17 +337,6 @@ const DrugManagement = () => {
             </Grid>
 
             <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="تاریخ انقضا (DD/MM/YYYY)"
-                placeholder="مثال: 25/12/2025"
-                value={formData.expire_dmy}
-                onChange={(e) => setFormData(prev => ({ ...prev, expire_dmy: e.target.value }))}
-                helperText={formData.expire_dmy ? `معادل شمسی: ${formatJalali(parseDMYToISO(formData.expire_dmy))}` : 'فرمت: روز/ماه/سال'}
-              />
-            </Grid>
-
-            <Grid item xs={12} md={6}>
               <FormControl fullWidth>
                 <InputLabel>نوع بسته‌بندی</InputLabel>
                 <Select
@@ -399,6 +351,10 @@ const DrugManagement = () => {
                   ))}
                 </Select>
               </FormControl>
+            </Grid>
+
+            <Grid item xs={12}>
+              <Alert severity='info'>تاریخ انقضا اکنون هنگام ثبت رسید (رسید کالا) در سطح لات ثبت می‌شود و در تعریف دارو نیازی به ورود آن نیست.</Alert>
             </Grid>
             
             <Grid item xs={12}>

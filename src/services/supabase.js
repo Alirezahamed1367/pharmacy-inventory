@@ -153,6 +153,50 @@ export const accessControlAPI = {
   }
 }
 
+// =====================================================
+// Users with Groups Aggregation Helpers
+// =====================================================
+export const listUsersWithGroups = async () => {
+  if (!supabase) return { data: [] }
+  try {
+    const { data: users } = await supabase.from('users').select('id, username, full_name, role, is_active, created_at')
+    if (!users?.length) return { data: [] }
+    const ids = users.map(u => u.id)
+    const { data: ug } = await supabase.from('user_access_groups').select('user_id, group_id').in('user_id', ids)
+    const groupIds = Array.from(new Set(ug?.map(r => r.group_id) || []))
+    let groupsMap = {}
+    if (groupIds.length) {
+      const { data: groups } = await supabase.from('access_groups').select('id, name, code').in('id', groupIds)
+      groups?.forEach(g => { groupsMap[g.id] = g })
+    }
+    const aggregated = users.map(u => {
+      const gForUser = ug?.filter(r => r.user_id === u.id).map(r => groupsMap[r.group_id]).filter(Boolean) || []
+      return { ...u, groups: gForUser }
+    })
+    return { data: aggregated }
+  } catch (e) {
+    return { data: [], error: { message: e.message } }
+  }
+}
+
+export const createUserWithGroups = async (userData, passwordPlain, groupIds=[]) => {
+  if (!supabase) return { error: { message: 'اتصال برقرار نیست' } }
+  try {
+    const hash = await bcrypt.hash(passwordPlain, 10)
+    const insertData = { username: userData.username, password_hash: hash, full_name: userData.full_name || userData.name || userData.username, role: userData.role || 'manager', is_active: userData.is_active !== false }
+    const { data: u, error } = await supabase.from('users').insert([insertData]).select().single()
+    if (error) return { error: { message: translateDbError(error.message) } }
+    if (groupIds.length) await accessControlAPI.assignGroupsToUser(u.id, groupIds)
+    return { data: u }
+  } catch (e) {
+    return { error: { message: translateDbError(e.message) } }
+  }
+}
+
+export const updateUserGroups = async (userId, groupIds=[]) => {
+  return await accessControlAPI.assignGroupsToUser(userId, groupIds)
+}
+
 // تغییر رمز عبور
 export const changePassword = async (userId, currentPassword, newPassword) => {
   if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
@@ -364,14 +408,15 @@ export const getImageUrl = (filePath, bucket = 'drug-images') => {
 
 // ===== توابع مدیریت داروها =====
 
-// دریافت لیست داروها (مرتب بر اساس تاریخ انقضا و سپس نام)
+// NOTE: ستون expire_date از جدول drugs در مدل نهایی حذف می‌شود؛ دارو فقط ویژگی‌های عمومی دارد.
+
+// دریافت لیست داروها (موقت: فقط بر اساس نام، تاریخ انقضا دیگر در تعریف دارو استفاده نمی‌شود)
 export const getDrugs = async () => {
   if (!supabase) return { data: [], error: null }
   try {
     const { data, error } = await supabase
       .from('drugs')
       .select('*')
-      .order('expire_date', { ascending: true })
       .order('name', { ascending: true })
     if (error) return { data: [], error }
     return { data: data || [], error: null }
@@ -384,16 +429,19 @@ export const getDrugs = async () => {
 export const addDrug = async (drugData) => {
   if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
   try {
-    const { name, description, package_type, expire_date, image_url } = drugData || {}
-    if (!name || !expire_date) return { error: { message: 'نام و تاریخ انقضا الزامی هستند' } }
-    // درج
-    const { data, error } = await supabase
-      .from('drugs')
-      .insert([{ name: name.trim(), description: description?.trim() || null, package_type: package_type || null, expire_date, image_url: image_url || null }])
-      .select()
+    const { name, description, package_type, image_url } = drugData || {}
+    if (!name) return { error: { message: 'نام دارو الزامی است' } }
+    // تلاش برای درج با یا بدون ستون expire_date (برای سازگاری قبل/بعد از migration)
+    let insertPayload = { name: name.trim(), description: description?.trim() || null, package_type: package_type || null, image_url: image_url || null }
+    let data, error
+    try {
+      ({ data, error } = await supabase.from('drugs').insert([insertPayload]).select())
+    } catch (e) {
+      return { error: { message: translateDbError(e.message) } }
+    }
     if (error) {
       if (error.message && (error.message.includes('duplicate key') || error.message.includes('unique constraint')) ) {
-        return { error: { message: 'این ترکیب (نام + بسته‌بندی + تاریخ انقضا) قبلاً وجود دارد' } }
+        return { error: { message: 'این ترکیب (نام + بسته‌بندی) قبلاً وجود دارد' } }
       }
       return { error: { message: translateDbError(error.message) } }
     }
@@ -410,11 +458,11 @@ export const updateDrug = async (id, drugData) => {
   }
 
   try {
-    const { name, description, package_type, expire_date, image_url } = drugData || {}
-    if (!name || !expire_date) return { error: { message: 'نام و تاریخ انقضا الزامی هستند' } }
+    const { name, description, package_type, image_url } = drugData || {}
+    if (!name) return { error: { message: 'نام دارو الزامی است' } }
     const { data, error } = await supabase
-      .from('drugs')
-      .update({ name, description: description || null, package_type: package_type || null, expire_date, image_url: image_url || null })
+        .from('drugs')
+        .update({ name, description: description || null, package_type: package_type || null })
       .eq('id', id)
       .select()
     if (error) return { error: { message: translateDbError(error.message) } }
@@ -602,6 +650,73 @@ export const getLotsExpiringSummary = async () => {
   }
 }
 
+// Helper: create or fetch an existing lot for (drug_id, expire_date, lot_number)
+// Returns { data: lot_id, error }
+export const getOrCreateLot = async ({ drug_id, expire_date, lot_number = null }) => {
+  if (!supabase) return { data: null, error: { message: 'اتصال پایگاه داده برقرار نیست' } }
+  if (!drug_id || !expire_date) return { data: null, error: { message: 'شناسه دارو و تاریخ انقضا الزامی است' } }
+  try {
+    const { data: existing, error: findErr } = await supabase
+      .from('drug_lots')
+      .select('id')
+      .eq('drug_id', drug_id)
+      .eq('expire_date', expire_date)
+      .eq('lot_number', lot_number || null)
+      .maybeSingle()
+    if (findErr) return { data: null, error: findErr }
+    if (existing) return { data: existing.id, error: null }
+    const { data: inserted, error: insErr } = await supabase
+      .from('drug_lots')
+      .insert([{ drug_id, expire_date, lot_number: lot_number || null }])
+      .select('id')
+      .single()
+    if (insErr) return { data: null, error: insErr }
+    return { data: inserted.id, error: null }
+  } catch (e) {
+    return { data: null, error: { message: 'خطا در ایجاد lot: ' + e.message } }
+  }
+}
+
+// Aggregated expiry report grouped by lot expiry (and drug)
+// Returns rows: { drug_id, lot_id, drug_name, package_type, expire_date, total_quantity }
+export const getExpiryReport = async () => {
+  if (!supabase) return { data: [], error: null }
+  try {
+    // Join inventory -> drug_lots -> drugs; group by lot
+    const { data, error } = await supabase
+      .from('inventory')
+      .select(`
+        lot_id,
+        quantity,
+        drug:drugs(id,name,package_type),
+        lot:drug_lots(expire_date, lot_number, drug_id)
+      `)
+    if (error) return { data: [], error }
+    const map = {}
+    for (const row of data || []) {
+      const lot = row.lot || {}
+      if (!lot?.expire_date) continue
+      const key = row.lot_id || `${row.drug?.id}-${lot.expire_date}-${lot.lot_number || 'NULL'}`
+      if (!map[key]) {
+        map[key] = {
+          lot_id: row.lot_id,
+            drug_id: lot.drug_id || row.drug?.id,
+          drug_name: row.drug?.name,
+          package_type: row.drug?.package_type,
+          expire_date: lot.expire_date,
+          lot_number: lot.lot_number || null,
+          total_quantity: 0
+        }
+      }
+      map[key].total_quantity += row.quantity || 0
+    }
+    const rows = Object.values(map).sort((a,b)=> new Date(a.expire_date) - new Date(b.expire_date))
+    return { data: rows, error: null }
+  } catch (e) {
+    return { data: [], error: { message: 'خطا در دریافت گزارش انقضا: ' + e.message } }
+  }
+}
+
 // حذف انبار
 export const deleteWarehouse = async (id) => {
   if (!supabase) {
@@ -757,60 +872,42 @@ export const createReceipt = async ({ supplier_id = null, destination_warehouse_
     .single()
   if (receiptError) return { error: receiptError }
 
-  const itemsToInsert = []
-  for (const it of items) {
-    // تعیین expire_date برای lot: اولویت با it.expire_date سپس drugs.expire_date اگر موجود باشد
+  // Build & insert items using helper (expect each item now carries explicit expire_date)
+  for (const raw of items) {
+    if (!raw.drug_id || !raw.quantity) return { error: { message: 'آیتم رسید نامعتبر است' } }
+    // Require expire_date for new lots (future phase will enforce in UI)
     let lotId = null
-    if (it.expire_date) {
-      // تلاش برای یافتن lot موجود
-      const { data: existingLot, error: lotFindErr } = await supabase
-        .from('drug_lots')
-        .select('id')
-        .eq('drug_id', it.drug_id)
-        .eq('expire_date', it.expire_date)
-        .eq('lot_number', it.batch_number || null)
-        .maybeSingle()
-      if (lotFindErr) return { error: lotFindErr }
-      if (existingLot) {
-        lotId = existingLot.id
-      } else {
-        const { data: newLot, error: lotInsErr } = await supabase
-          .from('drug_lots')
-          .insert([{ drug_id: it.drug_id, expire_date: it.expire_date, lot_number: it.batch_number || null }])
-          .select('id')
-          .single()
-        if (lotInsErr) return { error: lotInsErr }
-        lotId = newLot.id
-      }
+    if (raw.expire_date) {
+      const lotRes = await getOrCreateLot({ drug_id: raw.drug_id, expire_date: raw.expire_date, lot_number: raw.batch_number || null })
+      if (lotRes.error) return { error: lotRes.error }
+      lotId = lotRes.data
     } else {
-      // تلاش برای گرفتن lot پیش‌فرض (ممکن است در مرحله backfill ایجاد شده باشد)
+      // fallback to default lot (legacy) - will be removed after UI enforces
       const { data: defaultLot } = await supabase
         .from('drug_lots')
-        .select('id')
-        .eq('drug_id', it.drug_id)
+        .select('id, expire_date')
+        .eq('drug_id', raw.drug_id)
         .is('lot_number', null)
         .limit(1)
         .maybeSingle()
       lotId = defaultLot?.id || null
     }
-    itemsToInsert.push({
+    // drug snapshot (until we drop expire_date column; then we may store lot.expire_date)
+    const { data: drugRow, error: drugErr } = await supabase.from('drugs').select('name, expire_date').eq('id', raw.drug_id).single()
+    if (drugErr) return { error: drugErr }
+    const payload = {
       receipt_id: receiptData.id,
-      drug_id: it.drug_id,
-      quantity: it.quantity,
-      batch_number: it.batch_number || null,
-      supplier_id: it.supplier_id || supplier_id || null,
-      lot_id: lotId
-    })
-  }
-    // تکمیل snapshot فیلدها (drug_name_snapshot, expire_date_snapshot)
-    for (const it of itemsToInsert) {
-      const { data: drugRow, error: drugErr } = await supabase.from('drugs').select('name, expire_date').eq('id', it.drug_id).single()
-      if (drugErr) return { error: drugErr }
-      const payload = { ...it, drug_name_snapshot: drugRow.name, expire_date_snapshot: drugRow.expire_date }
-      const { error: insErr } = await supabase.from('receipt_items').insert([payload])
-      if (insErr) return { error: insErr }
+      drug_id: raw.drug_id,
+      quantity: raw.quantity,
+      batch_number: raw.batch_number || null,
+      supplier_id: raw.supplier_id || supplier_id || null,
+      lot_id: lotId,
+      drug_name_snapshot: drugRow?.name || null,
+      expire_date_snapshot: drugRow?.expire_date || raw.expire_date || null
     }
-    // اگر حلقه موفق باشد، آیتم‌ها درج شده‌اند
+    const { error: insErr } = await supabase.from('receipt_items').insert([payload])
+    if (insErr) return { error: insErr }
+  }
   return { data: receiptData, error: null }
 }
 
@@ -872,9 +969,35 @@ export const completeReceipt = async (receipt_id) => {
 export const addReceiptItem = async (receipt_id, item) => {
   if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
   if (!item?.drug_id || !item?.quantity) return { error: { message: 'آیتم نامعتبر است' } }
-  const { error } = await supabase
-    .from('receipt_items')
-    .insert([{ receipt_id, drug_id: item.drug_id, quantity: item.quantity, batch_number: item.batch_number || null, supplier_id: item.supplier_id || null }])
+  // Expect item.expire_date (required for new lots); create/fetch lot
+  let lot_id = null
+  if (item.expire_date) {
+    const lotRes = await getOrCreateLot({ drug_id: item.drug_id, expire_date: item.expire_date, lot_number: item.batch_number || null })
+    if (lotRes.error) return { error: lotRes.error }
+    lot_id = lotRes.data
+  } else {
+    // fallback default lot
+    const { data: defLot } = await supabase
+      .from('drug_lots')
+      .select('id')
+      .eq('drug_id', item.drug_id)
+      .is('lot_number', null)
+      .limit(1)
+      .maybeSingle()
+    lot_id = defLot?.id || null
+  }
+  const { data: drugSnap } = await supabase.from('drugs').select('name, expire_date').eq('id', item.drug_id).maybeSingle()
+  const row = {
+    receipt_id,
+    drug_id: item.drug_id,
+    quantity: item.quantity,
+    batch_number: item.batch_number || null,
+    supplier_id: item.supplier_id || null,
+    lot_id,
+    drug_name_snapshot: drugSnap?.name || null,
+    expire_date_snapshot: drugSnap?.expire_date || item.expire_date || null
+  }
+  const { error } = await supabase.from('receipt_items').insert([row])
   return { error }
 }
 

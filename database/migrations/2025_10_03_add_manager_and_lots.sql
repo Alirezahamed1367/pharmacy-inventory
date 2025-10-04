@@ -26,23 +26,26 @@ ALTER TABLE public.inventory ADD COLUMN IF NOT EXISTS lot_id UUID REFERENCES pub
 ALTER TABLE public.receipt_items ADD COLUMN IF NOT EXISTS lot_id UUID REFERENCES public.drug_lots(id);
 ALTER TABLE public.transfer_items ADD COLUMN IF NOT EXISTS lot_id UUID REFERENCES public.drug_lots(id);
 
--- 4. Backfill: create a lot per drug using existing drugs.expire_date if inventory rows without lot exist.
--- (Idempotent: skip if already created)
--- Revised backfill: production schema may not have drug_id on transfer_items; instead we later map via inventory join.
+-- 4. Backfill (only if drugs.expire_date column still exists). If schema already migrated to lot-only (expire_date dropped), skip silently.
 DO $$
-DECLARE r RECORD; new_lot_id UUID; BEGIN
-  FOR r IN SELECT id, expire_date FROM public.drugs WHERE expire_date IS NOT NULL LOOP
-    SELECT id INTO new_lot_id FROM public.drug_lots 
-      WHERE drug_id = r.id AND expire_date = r.expire_date AND lot_number IS NULL LIMIT 1;
-    IF new_lot_id IS NULL THEN
-      INSERT INTO public.drug_lots(drug_id, lot_number, expire_date)
-        VALUES (r.id, NULL, r.expire_date)
-        RETURNING id INTO new_lot_id;
-    END IF;
-    -- inventory & receipt_items have drug_id
-    UPDATE public.inventory SET lot_id = new_lot_id WHERE lot_id IS NULL AND drug_id = r.id;
-    UPDATE public.receipt_items SET lot_id = new_lot_id WHERE lot_id IS NULL AND drug_id = r.id;
-  END LOOP;
+DECLARE col_exists BOOLEAN; r RECORD; new_lot_id UUID; BEGIN
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema='public' AND table_name='drugs' AND column_name='expire_date'
+  ) INTO col_exists;
+  IF col_exists THEN
+    FOR r IN SELECT id, expire_date FROM public.drugs WHERE expire_date IS NOT NULL LOOP
+      SELECT id INTO new_lot_id FROM public.drug_lots 
+        WHERE drug_id = r.id AND expire_date = r.expire_date AND lot_number IS NULL LIMIT 1;
+      IF new_lot_id IS NULL THEN
+        INSERT INTO public.drug_lots(drug_id, lot_number, expire_date)
+          VALUES (r.id, NULL, r.expire_date)
+          RETURNING id INTO new_lot_id;
+      END IF;
+      UPDATE public.inventory SET lot_id = new_lot_id WHERE lot_id IS NULL AND drug_id = r.id;
+      UPDATE public.receipt_items SET lot_id = new_lot_id WHERE lot_id IS NULL AND drug_id = r.id;
+    END LOOP;
+  END IF;
 END$$;
 
 -- Populate transfer_items.lot_id via inventory link (transfer_items has inventory_id)

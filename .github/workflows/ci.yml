@@ -31,8 +31,15 @@ jobs:
             export VITE_SUPABASE_ANON_KEY="anon-key-placeholder"
           fi
           npm run build
+      - name: Export Supabase env flags
+        run: |
+          if [ -n "${{ secrets.VITE_SUPABASE_URL }}" ] && [ -n "${{ secrets.VITE_SUPABASE_ANON_KEY }}" ]; then
+            echo "SUPABASE_SECRETS_PRESENT=true" >> $GITHUB_ENV
+          else
+            echo "SUPABASE_SECRETS_PRESENT=false" >> $GITHUB_ENV
+          fi
       - name: Smoke Script
-        if: ${{ secrets.VITE_SUPABASE_URL != '' && secrets.VITE_SUPABASE_ANON_KEY != '' }}
+        if: env.SUPABASE_SECRETS_PRESENT == 'true'
         run: |
           if [ -f scripts/smokeCheck.mjs ]; then node scripts/smokeCheck.mjs || true; fi
       - name: Summary
