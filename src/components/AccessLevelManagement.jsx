@@ -148,11 +148,8 @@ const AccessLevelManagement = () => {
   };
 
   const handleAccessLevelChange = (newLevel) => {
-    setFormData({
-      ...formData,
-      accessLevel: newLevel,
-      permissions: ACCESS_LEVELS[newLevel.toUpperCase()]?.permissions || []
-    });
+    // در نسخه جدید: سطح دسترسی از طریق گروه‌ها تامین می‌شود؛ این کنترل صرفاً یک برچسب ساده باقی می‌ماند
+    setFormData({ ...formData, accessLevel: newLevel })
   };
 
   const handlePermissionToggle = (permission) => {
@@ -200,9 +197,7 @@ const AccessLevelManagement = () => {
     }
   };
 
-  const getAccessLevelInfo = (level) => {
-    return ACCESS_LEVELS[level.toUpperCase()] || ACCESS_LEVELS.OPERATOR;
-  };
+  const getAccessLevelInfo = (level) => ({ id: level, name: level, color: 'default' })
 
   const getWarehouseNames = (warehouseIds) => {
     if (warehouseIds.includes('all')) return 'همه انبارها';
@@ -411,19 +406,9 @@ const AccessLevelManagement = () => {
             <Grid item xs={12}>
               <FormControl fullWidth>
                 <InputLabel>سطح دسترسی</InputLabel>
-                <Select
-                  value={formData.accessLevel}
-                  onChange={(e) => handleAccessLevelChange(e.target.value)}
-                  disabled={selectedUser?.username === 'superadmin'}
-                >
-                  {Object.values(ACCESS_LEVELS).map((level) => (
-                    <MenuItem key={level.id} value={level.id}>
-                      <Box display="flex" alignItems="center">
-                        <SecurityIcon color={level.color} sx={{ mr: 1 }} />
-                        {level.name} - {level.description}
-                      </Box>
-                    </MenuItem>
-                  ))}
+                <Select value={formData.accessLevel} onChange={(e)=>handleAccessLevelChange(e.target.value)} disabled={selectedUser?.username === 'superadmin'}>
+                  <MenuItem value="basic">پایه</MenuItem>
+                  <MenuItem value="advanced">پیشرفته</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
@@ -437,21 +422,7 @@ const AccessLevelManagement = () => {
                   </Typography>
                 </AccordionSummary>
                 <AccordionDetails>
-                  <Grid container spacing={1}>
-                    {Object.entries(PERMISSIONS).map(([key, label]) => (
-                      <Grid item xs={12} md={6} key={key}>
-                        <FormControlLabel
-                          control={
-                            <Checkbox
-                              checked={formData.permissions.includes(key)}
-                              onChange={() => handlePermissionToggle(key)}
-                            />
-                          }
-                          label={label}
-                        />
-                      </Grid>
-                    ))}
-                  </Grid>
+                  <Alert severity="info">مجوزهای دقیق اکنون از طریق «گروه‌های دسترسی» مدیریت می‌شوند. این بخش در نسخه بعدی با انتساب گروه به کاربر جایگزین می‌شود.</Alert>
                 </AccordionDetails>
               </Accordion>
             </Grid>
