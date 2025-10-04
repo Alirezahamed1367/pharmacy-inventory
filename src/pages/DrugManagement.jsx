@@ -105,6 +105,29 @@ const DrugManagement = () => {
       setAlert({ type: 'error', message: 'نام، نوع بسته‌بندی و تاریخ انقضا الزامی است' })
       return
     }
+    // اعتبارسنجی فرمت DD/MM/YYYY و منطق تاریخ
+    const regex = /^\d{2}\/\d{2}\/\d{4}$/
+    if (!regex.test(formData.expire_dmy)) {
+      setAlert({ type: 'error', message: 'فرمت تاریخ باید DD/MM/YYYY باشد (مثال 25/12/2025)' })
+      return
+    }
+    const [dd, mm, yyyy] = formData.expire_dmy.split('/')
+    const dayNum = Number(dd), monNum = Number(mm), yearNum = Number(yyyy)
+    if (monNum < 1 || monNum > 12 || dayNum < 1 || dayNum > 31) {
+      setAlert({ type: 'error', message: 'مقادیر روز یا ماه نامعتبر است' })
+      return
+    }
+    const isoExpireTemp = `${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`
+    const dt = new Date(isoExpireTemp)
+    if (isNaN(dt.getTime())) {
+      setAlert({ type: 'error', message: 'تاریخ نامعتبر است' })
+      return
+    }
+    const today = new Date(); today.setHours(0,0,0,0)
+    if (dt < today) {
+      setAlert({ type: 'error', message: 'تاریخ انقضا نباید گذشته باشد' })
+      return
+    }
     const isoExpire = parseDMYToISO(formData.expire_dmy)
     if (!isoExpire) {
       setAlert({ type: 'error', message: 'فرمت تاریخ صحیح نیست (DD/MM/YYYY)' })
