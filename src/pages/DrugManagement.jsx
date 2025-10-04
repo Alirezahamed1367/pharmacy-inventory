@@ -65,7 +65,8 @@ const DrugManagement = () => {
     description: '',
     expire_dmy: '', // فرم نمایش DD/MM/YYYY
     package_type: '',
-    image_url: ''
+    image_url: '',
+    is_active: true
   })
 
   useEffect(() => {
@@ -90,7 +91,8 @@ const DrugManagement = () => {
       description: '',
       expire_dmy: '',
       package_type: '',
-      image_url: ''
+      image_url: '',
+      is_active: true
     })
     setEditingDrug(null)
   }
@@ -167,7 +169,8 @@ const DrugManagement = () => {
       description: drug.description || '',
       expire_dmy: drug.expire_date ? formatDMY(drug.expire_date) : '',
       package_type: drug.package_type || '',
-      image_url: drug.image_url || ''
+      image_url: drug.image_url || '',
+      is_active: drug.is_active !== false
     })
     setOpen(true)
   }
@@ -268,6 +271,7 @@ const DrugManagement = () => {
               <TableCell>تاریخ انقضا</TableCell>
               <TableCell>نوع بسته‌بندی</TableCell>
               <TableCell>تصویر</TableCell>
+              <TableCell>وضعیت</TableCell>
               <TableCell>عملیات</TableCell>
             </TableRow>
           </TableHead>
@@ -314,20 +318,27 @@ const DrugManagement = () => {
                   )}
                 </TableCell>
                 <TableCell>
+                    {drug.is_active ? <Box component='span' sx={{ color:'success.main', fontWeight:600 }}>فعال</Box> : <Box component='span' sx={{ color:'text.disabled' }}>غیرفعال</Box>}
+                  </TableCell>
+                  <TableCell>
                   <IconButton onClick={() => handleEdit(drug)} size="small">
                     <EditIcon />
                   </IconButton>
                   <IconButton onClick={() => handleDelete(drug.id)} size="small" color="error">
                     <DeleteIcon />
                   </IconButton>
+                    <Button size='small' sx={{ ml:1 }} variant='outlined' onClick={async ()=>{
+                      const res = await updateDrug(drug.id, { ...drug, is_active: !drug.is_active })
+                      if (res.error) { setAlert({ type:'error', message: res.error.message }); return }
+                      setAlert({ type:'success', message: 'وضعیت دارو به‌روزرسانی شد' })
+                      loadData()
+                    }}>{drug.is_active ? 'غیرفعال' : 'فعال سازی'}</Button>
                 </TableCell>
               </TableRow>
             ))}
             {filteredDrugs.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} align="center">
-                  هیچ دارویی یافت نشد
-                </TableCell>
+                <TableCell colSpan={7} align="center">هیچ دارویی یافت نشد</TableCell>
               </TableRow>
             )}
           </TableBody>

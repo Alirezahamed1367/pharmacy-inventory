@@ -25,8 +25,8 @@ const ImageUpload = ({
   value = null, 
   onChange, 
   label = "آپلود تصویر",
-  accept = "image/*",
-  maxSize = 5, // MB (raw file max before compression attempt)
+  accept = "image/jpeg",
+  maxSize = 1, // MB (raw file max before compression attempt)
   bucket = "drug-images",
   targetMaxKB = 300, // هدف نهایی حجم پس از فشرده‌سازی
   maxWidth = 800,
@@ -40,8 +40,8 @@ const ImageUpload = ({
 
   const validateFile = (file) => {
     // بررسی نوع فایل
-    if (!file.type.startsWith('image/')) {
-      throw new Error('فقط فایل‌های تصویری مجاز هستند')
+    if (file.type !== 'image/jpeg') {
+      throw new Error('فقط فایل JPG (JPEG) مجاز است')
     }
 
     // بررسی حجم فایل
@@ -253,7 +253,7 @@ const ImageUpload = ({
               {uploading ? 'در حال آپلود...' : label}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              فایل‌های مجاز: JPG, PNG, GIF (حداکثر {maxSize}MB)
+              فقط فایل JPG (حداکثر {maxSize}MB)
             </Typography>
             {!uploading && (
               <Button

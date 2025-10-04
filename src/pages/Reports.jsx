@@ -87,7 +87,8 @@ const Reports = () => {
       const inventoryData = (inventoryResult.data || []).map(item => ({
         ...item,
         drug_name: item.drug?.name,
-        expire_date: item.drug?.expire_date,
+        // استانداردسازی فیلد انقضا: فقط expire_date استفاده شود
+        expire_date: item.drug?.expire_date || item.expire_date || item.lot?.expire_date || null,
         package_type: item.drug?.package_type,
         warehouse_name: item.warehouse?.name,
         image_url: item.drug?.image_url
@@ -303,7 +304,6 @@ const Reports = () => {
                   <TableCell>موجودی</TableCell>
                   <TableCell>تاریخ انقضا</TableCell>
                   <TableCell>وضعیت</TableCell>
-                  <TableCell>انقضا</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -313,10 +313,9 @@ const Reports = () => {
                     <TableCell>{item.warehouse_name}</TableCell>
                     <TableCell>{item.quantity}</TableCell>
                     <TableCell>
-                      {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('fa-IR') : 'نامشخص'}
+                      {item.expire_date ? new Date(item.expire_date).toLocaleDateString('fa-IR') : 'نامشخص'}
                     </TableCell>
-                    <TableCell><ExpiryChip date={item.expiry_date} /></TableCell>
-                    <TableCell>{item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('fa-IR'): '—'}</TableCell>
+                    <TableCell><ExpiryChip date={item.expire_date} /></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -444,7 +443,6 @@ const Reports = () => {
                   <TableCell>موجودی</TableCell>
                   <TableCell>تاریخ انقضا</TableCell>
                   <TableCell>وضعیت</TableCell>
-                  <TableCell>انقضا</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -453,10 +451,9 @@ const Reports = () => {
                     <TableCell>{item.warehouse_name}</TableCell>
                     <TableCell>{item.quantity}</TableCell>
                     <TableCell>
-                      {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('fa-IR') : 'نامشخص'}
+                      {item.expire_date ? new Date(item.expire_date).toLocaleDateString('fa-IR') : 'نامشخص'}
                     </TableCell>
-                    <TableCell><ExpiryChip date={item.expiry_date} /></TableCell>
-                    <TableCell>{item.expiry_date ? new Date(item.expiry_date).toLocaleDateString('fa-IR'): '—'}</TableCell>
+                    <TableCell><ExpiryChip date={item.expire_date} /></TableCell>
                   </TableRow>
                 ))}
               </TableBody>

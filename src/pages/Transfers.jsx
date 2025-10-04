@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Box, Typography, Card, CardContent, Grid, Button, Alert, Table, TableHead, TableBody, TableRow, TableCell, TableContainer, Paper, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Chip, IconButton } from '@mui/material'
 import { Add as AddIcon, CompareArrows as TransferIcon, Check as CheckIcon, Error as ErrorIcon } from '@mui/icons-material'
-import { getTransfers, createTransfer, completeTransfer, getTransferItems, getAllWarehouses, getAllLotInventory } from '../services/supabase'
+import { getTransfers, createTransfer, completeTransfer, getTransferItems, getAllWarehouses, getAllLotInventory, deleteTransfer } from '../services/supabase'
 import { formatDMY } from '../utils/dateUtils'
 
 // Helper status chip
@@ -165,7 +165,17 @@ const Transfers = () => {
                     <TableCell><StatusChip status={tr.status} /></TableCell>
                     <TableCell>{formatDMY(tr.created_at)}</TableCell>
                     <TableCell align='center'>
-                      {tr.status==='in_transit' && <Button size='small' variant='outlined' onClick={()=>openCompleteDialog(tr)}>تکمیل</Button>}
+                      {tr.status==='in_transit' && (
+                        <>
+                          <Button size='small' variant='outlined' onClick={()=>openCompleteDialog(tr)}>تکمیل</Button>
+                          <Button size='small' sx={{ ml:1 }} variant='outlined' color='error' onClick={async ()=>{
+                            if (!window.confirm('حذف این حواله؟')) return
+                            const { error: delErr } = await deleteTransfer(tr.id)
+                            if (delErr) { setError(delErr.message); return }
+                            loadAll()
+                          }}>حذف</Button>
+                        </>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

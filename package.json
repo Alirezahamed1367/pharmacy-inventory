@@ -22,8 +22,9 @@
     "deploy": "npm run build && npx vercel --prod",
     "smoke": "node ./scripts/smokeCheck.mjs",
     "audit:lots": "node ./scripts/auditLots.mjs",
-    "perf:images": "node ./scripts/perfImageTest.mjs"
-    "seed:demo": "node ./scripts/seedDemo.mjs",
+  "perf:images": "node ./scripts/perfImageTest.mjs",
+  "seed:demo": "node ./scripts/seedDemo.mjs",
+  "cleanup:zero": "node ./scripts/cleanupZeroInventory.mjs"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",

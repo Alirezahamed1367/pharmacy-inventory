@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Box, Typography, Card, CardContent, Button, Grid, Alert, Chip, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, TextField } from '@mui/material'
 import { Add as AddIcon, Check as CheckIcon, Delete as DeleteIcon, Inventory as InventoryIcon, HourglassEmpty as PendingIcon } from '@mui/icons-material'
-import { getReceipts, createReceipt, completeReceipt, getReceiptItems, getDrugs, getAllWarehouses } from '../services/supabase'
+import { getReceipts, createReceipt, completeReceipt, getReceiptItems, getDrugs, getAllWarehouses, deleteReceipt } from '../services/supabase'
 import { supabase } from '../services/supabase'
 import { formatDMY } from '../utils/dateUtils'
 
@@ -17,7 +17,7 @@ const ReceiptManagement = () => {
   const [form, setForm] = useState({ destination_warehouse_id: '', supplier_id: '', notes: '', document_date: new Date().toISOString().slice(0,10) })
   const [suppliers, setSuppliers] = useState([])
   const [items, setItems] = useState([]) // temp items before create
-  const [newItem, setNewItem] = useState({ drug_id: '', quantity: '', batch_number: '', supplier_id: '' })
+  const [newItem, setNewItem] = useState({ drug_id: '', quantity: '', supplier_id: '' })
   const [creating, setCreating] = useState(false)
   const [completing, setCompleting] = useState(false)
 
@@ -51,7 +51,7 @@ const ReceiptManagement = () => {
   const resetForm = () => {
     setForm({ destination_warehouse_id: '', supplier_id: '', notes: '', document_date: new Date().toISOString().slice(0,10) })
     setItems([])
-  setNewItem({ drug_id: '', quantity: '', batch_number: '', supplier_id: '' })
+  setNewItem({ drug_id: '', quantity: '', supplier_id: '' })
   }
 
   const handleCreateReceipt = async () => {
@@ -66,7 +66,7 @@ const ReceiptManagement = () => {
         supplier_id: form.supplier_id || null,
         notes: form.notes || null,
         document_date: form.document_date,
-  items: items.map(i => ({ drug_id: i.drug_id, quantity: Number(i.quantity), batch_number: i.batch_number || null, supplier_id: i.supplier_id || null }))
+  items: items.map(i => ({ drug_id: i.drug_id, quantity: Number(i.quantity), supplier_id: i.supplier_id || null }))
       }
       const { error: cErr } = await createReceipt(payload)
       if (cErr) throw new Error(cErr.message)
@@ -104,7 +104,7 @@ const ReceiptManagement = () => {
   const addTempItem = () => {
     if (!newItem.drug_id || !newItem.quantity) return
     setItems(prev => [...prev, newItem])
-  setNewItem({ drug_id: '', quantity: '', batch_number: '', supplier_id: '' })
+  setNewItem({ drug_id: '', quantity: '', supplier_id: '' })
   }
 
   const removeTempItem = (idx) => {
@@ -166,7 +166,15 @@ const ReceiptManagement = () => {
                     <TableCell align='center'>
                       <Button size='small' variant='outlined' onClick={()=>openItemsDialog(r)}>آیتم‌ها</Button>
                       {r.status==='pending' && (
-                        <Button size='small' sx={{ ml:1 }} variant='contained' color='success' disabled={completing} onClick={()=>handleComplete(r)}>تکمیل</Button>
+                        <>
+                          <Button size='small' sx={{ ml:1 }} variant='contained' color='success' disabled={completing} onClick={()=>handleComplete(r)}>تکمیل</Button>
+                          <Button size='small' sx={{ ml:1 }} variant='outlined' color='error' onClick={async ()=>{
+                            if (!window.confirm('حذف این رسید؟')) return
+                            const { error: delErr } = await deleteReceipt(r.id)
+                            if (delErr) { setError(delErr.message); return }
+                            loadData()
+                          }}>حذف</Button>
+                        </>
                       )}
                     </TableCell>
                   </TableRow>
@@ -212,9 +220,7 @@ const ReceiptManagement = () => {
                 <Grid item xs={12} md={2}>
                   <TextField label='تعداد' type='number' fullWidth value={newItem.quantity} onChange={e=>setNewItem(i=>({...i,quantity:e.target.value}))} />
                 </Grid>
-                <Grid item xs={12} md={2}>
-                  <TextField label='بچ' fullWidth value={newItem.batch_number} onChange={e=>setNewItem(i=>({...i,batch_number:e.target.value}))} />
-                </Grid>
+                {/* حذف فیلد بچ */}
                 <Grid item xs={12} md={2}>
                   <TextField select SelectProps={{ native:true }} label='تامین‌کننده (اختیاری)' fullWidth value={newItem.supplier_id} onChange={e=>setNewItem(i=>({...i,supplier_id:e.target.value}))}>
                     <option value=''>انتخاب...</option>
@@ -231,7 +237,7 @@ const ReceiptManagement = () => {
                     <TableCell>دارو</TableCell>
                     <TableCell>انقضا</TableCell>
                     <TableCell>تعداد</TableCell>
-                    <TableCell>بچ</TableCell>
+                    {/* حذف ستون بچ */}
                     {/* حذف ستون انقضا آیتم */}
                     <TableCell>تامین‌کننده</TableCell>
                     <TableCell></TableCell>
@@ -245,7 +251,7 @@ const ReceiptManagement = () => {
                         <TableCell>{drug?.name}</TableCell>
                         <TableCell>{formatDMY(drug?.expire_date)}</TableCell>
                         <TableCell>{it.quantity}</TableCell>
-                        <TableCell>{it.batch_number||'-'}</TableCell>
+                        {/* حذف مقدار بچ */}
                         {/* ستون حذف شده */}
                         <TableCell>{suppliers.find(s=>s.id===it.supplier_id)?.name || suppliers.find(s=>s.id===form.supplier_id)?.name || '-'}</TableCell>
                         <TableCell><IconButton color='error' size='small' onClick={()=>removeTempItem(idx)}><DeleteIcon fontSize='small' /></IconButton></TableCell>
@@ -275,7 +281,7 @@ const ReceiptManagement = () => {
                   <TableCell>دارو</TableCell>
                   <TableCell>انقضا</TableCell>
                   <TableCell>تعداد</TableCell>
-                  <TableCell>بچ</TableCell>
+                  {/* حذف ستون بچ */}
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -284,7 +290,7 @@ const ReceiptManagement = () => {
                     <TableCell>{it.drugs?.name}</TableCell>
                     <TableCell>{formatDMY(it.drugs?.expire_date)}</TableCell>
                     <TableCell>{it.quantity}</TableCell>
-                    <TableCell>{it.batch_number || '-'}</TableCell>
+                    {/* حذف مقدار بچ */}
                   </TableRow>
                 ))}
                 {items.length===0 && <TableRow><TableCell colSpan={4} align='center'>آیتمی ثبت نشده</TableCell></TableRow>}

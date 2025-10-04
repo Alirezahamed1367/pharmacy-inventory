@@ -16,8 +16,8 @@ export const isBackendAvailable = () => !!(import.meta.env.VITE_SUPABASE_URL && 
 // =====================================================
 export const STORAGE_CONFIG = {
   drugImagesBucket: 'drug-images',
-  maxFileSize: 5 * 1024 * 1024, // 5MB
-  allowedTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+  maxFileSize: 1 * 1024 * 1024, // 1MB
+  allowedTypes: ['image/jpeg'],
   uploadPath: 'drugs' // پوشه داخل bucket
 }
 
@@ -327,6 +327,22 @@ export const deleteDrug = async (id) => {
   }
 
   try {
+    // قبل از حذف بررسی می‌کنیم آیا رکورد در موجودی یا اسناد استفاده شده است
+    // 1. موجودی
+    const { data: invRef, error: invErr } = await supabase.from('inventory').select('id').eq('drug_id', id).limit(1)
+    if (invErr) return { error: { message: 'خطا در بررسی موجودی: ' + invErr.message } }
+    if (invRef && invRef.length > 0) {
+      return { error: { message: 'این دارو در موجودی انبارها استفاده شده است و قابل حذف مستقیم نیست (ابتدا موجودی را صفر و رکورد را پاک کنید یا انقضا را ویرایش کنید).' } }
+    }
+    // 2. آیتم‌های رسید
+    const { data: recRef, error: recErr } = await supabase.from('receipt_items').select('id').eq('drug_id', id).limit(1)
+    if (recErr) return { error: { message: 'خطا در بررسی رسیدها: ' + recErr.message } }
+    if (recRef && recRef.length > 0) {
+      return { error: { message: 'این دارو در رسیدهای ثبت‌شده استفاده شده است؛ حذف باعث از دست رفتن تاریخچه می‌شود. پیشنهاد: غیرفعال‌سازی یا عدم استفاده در آینده.' } }
+    }
+    // 3. انتقالات (از طریق inventory شناخته می‌شد؛ ولی اگر در طراحی بعدی مستقیما ارتباط داشت اینجا جداگانه بررسی می‌شود)
+    // فعلا نیازی نیست چون transfer_items به inventory رجوع می‌کند.
+
     const { error } = await supabase
       .from('drugs')
       .delete()
@@ -556,9 +572,10 @@ export const getActiveDrugs = async () => {
 
   try {
     const { data, error } = await supabase
-  .from('drugs')
-  .select('*')
-  .order('name')
+      .from('drugs')
+      .select('*')
+      .eq('is_active', true)
+      .order('name')
 
     return { data: data || [], error }
   } catch (error) {
@@ -664,8 +681,15 @@ export const createReceipt = async ({ supplier_id = null, destination_warehouse_
       lot_id: lotId
     })
   }
-  const { error: itemsError } = await supabase.from('receipt_items').insert(itemsToInsert)
-  if (itemsError) return { error: itemsError }
+    // تکمیل snapshot فیلدها (drug_name_snapshot, expire_date_snapshot)
+    for (const it of itemsToInsert) {
+      const { data: drugRow, error: drugErr } = await supabase.from('drugs').select('name, expire_date').eq('id', it.drug_id).single()
+      if (drugErr) return { error: drugErr }
+      const payload = { ...it, drug_name_snapshot: drugRow.name, expire_date_snapshot: drugRow.expire_date }
+      const { error: insErr } = await supabase.from('receipt_items').insert([payload])
+      if (insErr) return { error: insErr }
+    }
+    // اگر حلقه موفق باشد، آیتم‌ها درج شده‌اند
   return { data: receiptData, error: null }
 }
 
@@ -740,6 +764,22 @@ export const deleteReceiptItem = async (item_id) => {
   return { error }
 }
 
+// حذف رسید (فقط اگر pending باشد و هنوز تکمیل نشده)
+export const deleteReceipt = async (receipt_id) => {
+  if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
+  try {
+    const { data: receipt, error: rErr } = await supabase.from('receipts').select('id,status').eq('id', receipt_id).single()
+    if (rErr) return { error: { message: 'رسید یافت نشد' } }
+    if (receipt.status !== 'pending') {
+      return { error: { message: 'فقط رسیدهای در انتظار قابل حذف هستند' } }
+    }
+    const { error: delErr } = await supabase.from('receipts').delete().eq('id', receipt_id)
+    return { error: delErr || null }
+  } catch (e) {
+    return { error: { message: 'خطا در حذف رسید: ' + e.message } }
+  }
+}
+
 // دریافت آیتم‌های یک رسید
 export const getReceiptItems = async (receipt_id) => {
   if (!supabase) return { data: [], error: null }
@@ -800,7 +840,10 @@ export const createTransfer = async ({ source_warehouse_id, destination_warehous
       .update({ quantity: inv.quantity - it.quantity_sent, updated_at: new Date().toISOString() })
       .eq('id', inv.id)
     if (updErr) return { error: updErr }
-    const row = { transfer_id: transferData.id, inventory_id: it.inventory_id, quantity_sent: it.quantity_sent }
+  // snapshot برای حواله: استخراج drug از inventory
+  const { data: snapInv, error: snapErr } = await supabase.from('inventory').select('drug_id, drug:drugs(name, expire_date)').eq('id', it.inventory_id).single()
+  if (snapErr) return { error: snapErr }
+  const row = { transfer_id: transferData.id, inventory_id: it.inventory_id, quantity_sent: it.quantity_sent, drug_name_snapshot: snapInv?.drug?.name, expire_date_snapshot: snapInv?.drug?.expire_date }
     if (it.lot_id || inv.lot_id) row.lot_id = it.lot_id || inv.lot_id
     const { error: insErr } = await supabase.from('transfer_items').insert([row])
     if (insErr) return { error: insErr }
@@ -869,6 +912,20 @@ export const getTransferItems = async (transfer_id) => {
     .select('*, inventory(id, drug_id, batch_number, lot_id, quantity, drug:drugs(name, expire_date, package_type), lot:drug_lots(expire_date, lot_number))')
     .eq('transfer_id', transfer_id)
   return { data: data || [], error }
+}
+
+// حذف حواله (فقط در وضعیت در حال انتقال)
+export const deleteTransfer = async (transfer_id) => {
+  if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
+  try {
+    const { data: transfer, error: tErr } = await supabase.from('transfers').select('id,status').eq('id', transfer_id).single()
+    if (tErr) return { error: { message: 'حواله یافت نشد' } }
+    if (transfer.status !== 'in_transit') return { error: { message: 'فقط حواله‌های در حال انتقال قابل حذف هستند' } }
+    const { error: delErr } = await supabase.from('transfers').delete().eq('id', transfer_id)
+    return { error: delErr || null }
+  } catch (e) {
+    return { error: { message: 'خطا در حذف حواله: ' + e.message } }
+  }
 }
 
 // دریافت موجودی lots (برای UI حواله) - فقط رکوردهای دارای quantity>0
