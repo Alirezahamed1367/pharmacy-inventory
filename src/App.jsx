@@ -10,14 +10,15 @@ import { CacheProvider } from '@emotion/react'
 import createCache from '@emotion/cache'
 
 // import { supabase } from './services/supabase' // غیرفعال برای تست محلی
-import LoginPage from './pages/LoginPage'
-import Dashboard from './pages/Dashboard'
-import DrugManagement from './pages/DrugManagement'
-import ReceiptManagement from './pages/ReceiptManagement'
-import Transfers from './pages/Transfers'
-import WarehouseManagement from './pages/WarehouseManagement'
-import Reports from './pages/Reports'
-import Settings from './pages/Settings'
+import React, { Suspense, lazy } from 'react'
+const LoginPage = lazy(()=> import('./pages/LoginPage'))
+const Dashboard = lazy(()=> import('./pages/Dashboard'))
+const DrugManagement = lazy(()=> import('./pages/DrugManagement'))
+const ReceiptManagement = lazy(()=> import('./pages/ReceiptManagement'))
+const Transfers = lazy(()=> import('./pages/Transfers'))
+const WarehouseManagement = lazy(()=> import('./pages/WarehouseManagement'))
+const Reports = lazy(()=> import('./pages/Reports'))
+const Settings = lazy(()=> import('./pages/Settings'))
 import Layout from './components/Layout'
 
 // ایجاد cache برای RTL
@@ -163,19 +164,21 @@ function App() {
           <Router>
             <div dir="rtl">
               {!user ? (
-                <LoginPage onLogin={setUser} />
+                <Suspense fallback={<div style={{padding:40}}>در حال بارگذاری...</div>}><LoginPage onLogin={setUser} /></Suspense>
               ) : (
                 <Layout onLogout={handleLogout}>
-                  <Routes>
-                    <Route path="/" element={<Dashboard />} />
-                    <Route path="/drugs" element={<DrugManagement />} />
-                    <Route path="/receipts" element={<ReceiptManagement />} />
-                    <Route path="/warehouses" element={<WarehouseManagement />} />
-                    <Route path="/transfers" element={<Transfers />} />
-                    <Route path="/reports" element={<Reports />} />
-                    <Route path="/settings" element={<Settings />} />
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                  </Routes>
+                  <Suspense fallback={<div style={{padding:40}}>در حال بارگذاری ماژول...</div>}>
+                    <Routes>
+                      <Route path="/" element={<Dashboard />} />
+                      <Route path="/drugs" element={<DrugManagement />} />
+                      <Route path="/receipts" element={<ReceiptManagement />} />
+                      <Route path="/warehouses" element={<WarehouseManagement />} />
+                      <Route path="/transfers" element={<Transfers />} />
+                      <Route path="/reports" element={<Reports />} />
+                      <Route path="/settings" element={<Settings />} />
+                      <Route path="*" element={<Navigate to="/" replace />} />
+                    </Routes>
+                  </Suspense>
                 </Layout>
               )}
             </div>

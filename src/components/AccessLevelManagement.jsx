@@ -3,6 +3,7 @@ import { Box, Typography, Card, CardContent, Button, Grid, TextField, Dialog, Di
 import { Add as AddIcon, Edit as EditIcon } from '@mui/icons-material';
 import { PERMISSION_GROUPS } from '../services/permissions';
 import { accessControlAPI, supabase, listUsersWithGroups, createUserWithGroups, updateUserGroups } from '../services/supabase';
+import { useAsync } from '../hooks/useAsync';
 
 const AccessLevelManagement = () => {
   const [users, setUsers] = useState([]);
@@ -15,17 +16,18 @@ const AccessLevelManagement = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [formData, setFormData] = useState({ id: null, username: '', name: '', password: '', isActive: true, groupIds: [] });
 
-  const loadGroups = async () => {
+  const groupsLoader = useAsync(async () => {
     const { data } = await accessControlAPI.listGroups();
-    setGroups(data || []);
     const { data: wh } = await supabase.from('warehouses').select('id,name');
     setWarehouses(wh || []);
-  };
-  const loadUsers = async () => {
+    return data || []
+  }, [])
+  const usersLoader = useAsync(async () => {
     const { data } = await listUsersWithGroups();
-    setUsers(data || []);
-  };
-  useEffect(() => { loadGroups(); loadUsers(); }, []);
+    return data || []
+  }, [])
+  useEffect(()=> { if (groupsLoader.data) setGroups(groupsLoader.data); }, [groupsLoader.data])
+  useEffect(()=> { if (usersLoader.data) setUsers(usersLoader.data); }, [usersLoader.data])
 
   const handleOpenDialog = (user = null) => {
     if (user) {
@@ -52,7 +54,7 @@ const AccessLevelManagement = () => {
     } else {
       await accessControlAPI.createGroup({ name: groupForm.name, code: groupForm.code, description: groupForm.description, permissions: groupForm.permissions, warehouseIds: groupForm.warehouseIds });
     }
-    setGroupDialog(false); setErrorMsg(''); loadGroups();
+  setGroupDialog(false); setErrorMsg(''); groupsLoader.execute();
   };
 
   const handleSaveUser = () => {
@@ -64,7 +66,7 @@ const AccessLevelManagement = () => {
       } else {
         await updateUserGroups(formData.id, formData.groupIds);
       }
-      await loadUsers();
+  await usersLoader.execute();
       handleCloseDialog();
     };
     persist();
