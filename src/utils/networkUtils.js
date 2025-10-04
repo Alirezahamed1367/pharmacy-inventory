@@ -21,3 +21,22 @@ export const mapFetchError = (err) => {
 
 // نمونه استفاده پیشنهادی:
 // await withTimeout(signal => supabase.from('drugs').select('*'))
+
+// پینگ سبک برای تشخیص دسترسی Supabase (بدون فشار زیاد)
+// strategy: select یک ردیف از جدول کوچک/اصلی (drugs یا warehouses)
+export const pingSupabase = async (supabaseClient, { timeoutMs = 2500 } = {}) => {
+  if (!supabaseClient) return { ok: false, error: new Error('کلاینت مقداردهی نشده') }
+  try {
+    const res = await withTimeout(signal => {
+      return supabaseClient.from('drugs').select('id').limit(1).abortSignal(signal)
+    }, timeoutMs)
+    if (res.error) return { ok: false, error: res.error }
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: mapFetchError(e) }
+  }
+}
+
+// backoff ساده: delay = base * 2^attempt
+export const wait = (ms) => new Promise(r => setTimeout(r, ms))
+export const calcBackoff = (attempt, base = 1000) => base * Math.pow(2, attempt)

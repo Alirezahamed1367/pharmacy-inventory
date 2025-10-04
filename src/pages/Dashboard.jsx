@@ -28,7 +28,8 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { supabase, getInventoryDetailed, isBackendAvailable } from '../services/supabase'
 import Skeleton from '@mui/material/Skeleton'
-import dayjs from 'dayjs'
+  import { supabase, getInventoryDetailed, isBackendAvailable, checkBackendReachable } from '../services/supabase'
+  import { calcBackoff, wait } from '../utils/networkUtils'
 import 'dayjs/locale/fa'
 
 dayjs.locale('fa')
@@ -43,6 +44,7 @@ export default function Dashboard() {
   const [error, setError] = useState(null)
   const navigate = useNavigate()
 
+    const [reachability, setReachability] = useState({ checking: true, ok: true, attempts: 0, lastError: null })
   useEffect(() => {
     if (!isBackendAvailable()) {
       // داده نمایشی برای حالت آفلاین
@@ -57,10 +59,36 @@ export default function Dashboard() {
     }
     fetchDashboardData()
   }, [])
-
+      initLoad()
   const fetchDashboardData = async () => {
     setLoading(true)
-    try {
+    const initLoad = async () => {
+      // ابتدا چک دسترس پذیری با backoff
+      if (!isBackendAvailable()) {
+        setReachability({ checking: false, ok: false, attempts: 0, lastError: new Error('پیکربندی سرور موجود نیست') })
+        setLoading(false)
+        return
+      }
+      let ok = false
+      let lastErr = null
+      for (let attempt = 0; attempt < 3; attempt++) {
+        setReachability(r => ({ ...r, checking: true, attempts: attempt+1 }))
+        const res = await checkBackendReachable({ timeoutMs: 2500 })
+        if (res.ok) { ok = true; break }
+        lastErr = res.error
+        const delay = calcBackoff(attempt, 900)
+        await wait(delay)
+      }
+      setReachability({ checking: false, ok, attempts: ok ? 1 : 3, lastError: ok ? null : lastErr })
+      if (!ok) {
+        // نمایش حالت نیمه آفلاین، بارگذاری کامل را متوقف می‌کنیم ولی اجازه Retry
+        setLoading(false)
+        return
+      }
+      fetchDashboardData()
+    }
+
+    const fetchDashboardData = async () => {
       // تعداد کل داروها (هر واریانت یک ردیف)
       const { data: drugsData, error: drugsError } = await supabase
         .from('drugs')
@@ -125,6 +153,11 @@ export default function Dashboard() {
 
   const handleQuickAction = (action) => {
     switch (action) {
+    const handleRetry = () => {
+      setError(null)
+      setReachability(r => ({ ...r, checking: true }))
+      initLoad()
+    }
       case 'add-drug':
         navigate('/drugs')
         break

@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcryptjs'
 import { translateDbError } from '../utils/errorUtils'
 import { ALL_PERMISSIONS } from './permissions'
+import { pingSupabase } from '../utils/networkUtils'
 
 // استفاده از environment variables برای امنیت
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co'
@@ -12,6 +13,13 @@ export const supabase = import.meta.env.VITE_SUPABASE_URL ?
   createClient(supabaseUrl, supabaseKey) : null
 
 export const isBackendAvailable = () => !!(import.meta.env.VITE_SUPABASE_URL && supabase)
+
+// بررسی سریع دسترس‌پذیری (timeout کوتاه). نتیجه را به صورت ساختارمند برمی‌گرداند.
+export const checkBackendReachable = async (opts = {}) => {
+  if (!isBackendAvailable()) return { ok: false, error: new Error('backend env نیست') }
+  const res = await pingSupabase(supabase, { timeoutMs: opts.timeoutMs || 2500 })
+  return res
+}
 
 // =====================================================
 // تنظیمات Storage برای تصاویر
