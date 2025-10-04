@@ -12,6 +12,8 @@ const ReceiptManagement = () => {
   const [openNew, setOpenNew] = useState(false)
   const [openItems, setOpenItems] = useState(false)
   const [editingHeader, setEditingHeader] = useState(false)
+  const [dirty, setDirty] = useState(false)
+  const [drugSearch, setDrugSearch] = useState('')
   const [currentReceipt, setCurrentReceipt] = useState(null)
   const [drugs, setDrugs] = useState([])
   const [warehouses, setWarehouses] = useState([])
@@ -100,6 +102,9 @@ const ReceiptManagement = () => {
     setOpenItems(true)
     const { data, error: itErr } = await getReceiptItems(receipt.id)
     if (!itErr) setItems(data)
+    // preload form for header editing
+    setForm({ destination_warehouse_id: receipt.destination_warehouse_id || '', supplier_id: receipt.supplier_id || '', notes: receipt.notes || '', document_date: receipt.document_date || new Date().toISOString().slice(0,10) })
+    setDirty(false)
   }
 
   const handleUpdateHeader = async () => {
@@ -108,6 +113,7 @@ const ReceiptManagement = () => {
     const { error: uErr } = await updateReceipt(currentReceipt.id, patch)
     if (uErr) { setError(uErr.message); return }
     setEditingHeader(false)
+    setDirty(false)
     loadData()
   }
 
@@ -119,6 +125,7 @@ const ReceiptManagement = () => {
     setNewItem({ drug_id:'', quantity:'', supplier_id:'' })
     const { data } = await getReceiptItems(currentReceipt.id)
     setItems(data)
+    setDirty(true)
   }
 
   const handleUpdateItemQty = async (it, qty) => {
@@ -127,6 +134,7 @@ const ReceiptManagement = () => {
     if (upErr) { setError(upErr.message); return }
     const { data } = await getReceiptItems(currentReceipt.id)
     setItems(data)
+    setDirty(true)
   }
 
   const handleDeleteItem = async (it) => {
@@ -140,11 +148,13 @@ const ReceiptManagement = () => {
   const addTempItem = () => {
     if (!newItem.drug_id || !newItem.quantity) return
     setItems(prev => [...prev, newItem])
+    setDirty(true)
   setNewItem({ drug_id: '', quantity: '', supplier_id: '' })
   }
 
   const removeTempItem = (idx) => {
     setItems(prev => prev.filter((_, i) => i !== idx))
+    setDirty(true)
   }
 
   const statusChip = (status) => {
@@ -203,7 +213,7 @@ const ReceiptManagement = () => {
                       <Button size='small' variant='outlined' onClick={()=>openItemsDialog(r)}>آیتم‌ها</Button>
                       {r.status==='pending' && (
                         <>
-                          <Button size='small' sx={{ ml:1 }} variant='contained' color='success' disabled={completing} onClick={()=>handleComplete(r)}>تکمیل</Button>
+                          <Button size='small' sx={{ ml:1 }} variant='outlined' color='primary' onClick={()=>{ openItemsDialog(r); setEditingHeader(true); setForm({ destination_warehouse_id: r.destination_warehouse_id || '', supplier_id: r.supplier_id || '', notes: r.notes || '', document_date: r.document_date || new Date().toISOString().slice(0,10) }) }}>ویرایش</Button>
                           <Button size='small' sx={{ ml:1 }} variant='outlined' color='error' onClick={async ()=>{
                             if (!window.confirm('حذف این رسید؟')) return
                             const { error: delErr } = await deleteReceipt(r.id)
@@ -211,6 +221,9 @@ const ReceiptManagement = () => {
                             loadData()
                           }}>حذف</Button>
                         </>
+                      )}
+                      {r.status==='completed' && (
+                        <Button size='small' sx={{ ml:1 }} variant='outlined' color='primary' onClick={()=>{ openItemsDialog(r); setEditingHeader(true); }}>ویرایش</Button>
                       )}
                     </TableCell>
                   </TableRow>
@@ -307,36 +320,42 @@ const ReceiptManagement = () => {
       </Dialog>
 
       {/* Dialog: Receipt Items (view existing) */}
-      <Dialog open={openItems} onClose={()=>{setOpenItems(false); setCurrentReceipt(null); setEditingHeader(false);}} maxWidth='md' fullWidth>
+      <Dialog open={openItems} onClose={()=>{
+        if (dirty && !window.confirm('تغییرات ذخیره نشده. بستن؟')) return
+        setOpenItems(false); setCurrentReceipt(null); setEditingHeader(false); setDirty(false);
+      }} maxWidth='md' fullWidth>
         <DialogTitle>
           آیتم‌های رسید
           {currentReceipt?.status==='pending' && (
             <Button size='small' sx={{ ml:2 }} onClick={()=> setEditingHeader(h=>!h)}>{editingHeader? 'انصراف ویرایش هدر':'ویرایش هدر'}</Button>
           )}
+          {currentReceipt?.status==='completed' && (
+            <Button size='small' sx={{ ml:2 }} onClick={()=> setEditingHeader(h=>!h)}>{editingHeader? 'انصراف':'ویرایش هدر'}</Button>
+          )}
         </DialogTitle>
         <DialogContent dividers>
           {currentReceipt && (
             <>
-              {editingHeader && currentReceipt.status==='pending' && (
+              {editingHeader && (
                 <Box sx={{ mb:2 }}>
                   <Grid container spacing={2}>
                     <Grid item xs={12} md={4}>
-                      <TextField select SelectProps={{ native:true }} label='انبار مقصد' fullWidth value={form.destination_warehouse_id} onChange={e=>setForm(f=>({...f,destination_warehouse_id:e.target.value}))}>
+                      <TextField disabled={currentReceipt.status==='completed'} select SelectProps={{ native:true }} label='انبار مقصد' fullWidth value={form.destination_warehouse_id} onChange={e=>{setForm(f=>({...f,destination_warehouse_id:e.target.value})); setDirty(true)}}>
                         <option value=''>انتخاب...</option>
                         {warehouses.map(w=> <option key={w.id} value={w.id}>{w.name}</option> )}
                       </TextField>
                     </Grid>
                     <Grid item xs={12} md={4}>
-                      <TextField select SelectProps={{ native:true }} label='تامین‌کننده' fullWidth value={form.supplier_id} onChange={e=>setForm(f=>({...f,supplier_id:e.target.value}))}>
+                      <TextField select SelectProps={{ native:true }} label='تامین‌کننده' fullWidth value={form.supplier_id} onChange={e=>{setForm(f=>({...f,supplier_id:e.target.value})); setDirty(true)}}>
                         <option value=''>انتخاب...</option>
                         {suppliers.map(s=> <option key={s.id} value={s.id}>{s.name}</option> )}
                       </TextField>
                     </Grid>
                     <Grid item xs={12} md={4}>
-                      <TextField type='date' label='تاریخ سند' InputLabelProps={{ shrink:true }} fullWidth value={form.document_date} onChange={e=>setForm(f=>({...f,document_date:e.target.value}))} />
+                      <TextField type='date' label='تاریخ سند' InputLabelProps={{ shrink:true }} fullWidth value={form.document_date} onChange={e=>{setForm(f=>({...f,document_date:e.target.value})); setDirty(true)}} />
                     </Grid>
                     <Grid item xs={12}>
-                      <TextField label='یادداشت' fullWidth value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} />
+                      <TextField label='یادداشت' fullWidth value={form.notes} onChange={e=>{setForm(f=>({...f,notes:e.target.value})); setDirty(true)}} />
                     </Grid>
                     <Grid item xs={12}>
                       <Button variant='contained' size='small' onClick={handleUpdateHeader}>ذخیره هدر</Button>
@@ -380,10 +399,13 @@ const ReceiptManagement = () => {
                 <Box sx={{ mt:2 }}>
                   <Typography variant='subtitle2'>افزودن آیتم جدید</Typography>
                   <Grid container spacing={1} alignItems='center'>
+                    <Grid item xs={12} md={3}>
+                      <TextField label='جستجوی دارو' size='small' fullWidth value={drugSearch} onChange={e=>setDrugSearch(e.target.value)} />
+                    </Grid>
                     <Grid item xs={12} md={4}>
                       <TextField select SelectProps={{ native:true }} label='دارو' fullWidth value={newItem.drug_id} onChange={e=>setNewItem(i=>({...i,drug_id:e.target.value}))}>
                         <option value=''>انتخاب...</option>
-                        {drugs.map(d=> <option key={d.id} value={d.id}>{d.name}</option> )}
+                        {drugs.filter(d=> d.name.toLowerCase().includes(drugSearch.toLowerCase())).map(d=> <option key={d.id} value={d.id}>{d.name}</option> )}
                       </TextField>
                     </Grid>
                     <Grid item xs={12} md={2}>
@@ -405,7 +427,11 @@ const ReceiptManagement = () => {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={()=>{setOpenItems(false); setCurrentReceipt(null); setEditingHeader(false);}}>بستن</Button>
+          {currentReceipt?.status==='pending' && <Button color='success' variant='contained' disabled={completing} onClick={()=>handleComplete(currentReceipt)}>تکمیل رسید</Button>}
+          <Button onClick={()=>{
+            if (dirty && !window.confirm('تغییرات ذخیره نشده. بستن؟')) return
+            setOpenItems(false); setCurrentReceipt(null); setEditingHeader(false); setDirty(false);
+          }}>بستن</Button>
         </DialogActions>
       </Dialog>
     </Box>

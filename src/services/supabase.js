@@ -783,14 +783,26 @@ export const deleteReceipt = async (receipt_id) => {
   }
 }
 
-// ویرایش هدر رسید (فقط در pending)
+// ویرایش هدر رسید
+// منطق جدید:
+//   - اگر رسید pending باشد: تمام فیلدهای مجاز (destination_warehouse_id, supplier_id, notes, document_date) قابل تغییرند.
+//   - اگر رسید completed باشد: فقط supplier_id, notes, document_date قابل تغییرند (تغییر انبار مقصد ممنوع است).
 export const updateReceipt = async (receipt_id, patch) => {
   if (!supabase) return { error: { message: 'اتصال پایگاه داده برقرار نیست' } }
   try {
     const { data: receipt, error: rErr } = await supabase.from('receipts').select('id,status').eq('id', receipt_id).single()
     if (rErr || !receipt) return { error: { message: 'رسید یافت نشد' } }
-    if (receipt.status !== 'pending') return { error: { message: 'رسید تکمیل شده قابل ویرایش نیست' } }
-    const allowed = { destination_warehouse_id: patch.destination_warehouse_id, supplier_id: patch.supplier_id, notes: patch.notes, document_date: patch.document_date }
+    let allowed
+    if (receipt.status === 'pending') {
+      allowed = { destination_warehouse_id: patch.destination_warehouse_id, supplier_id: patch.supplier_id, notes: patch.notes, document_date: patch.document_date }
+    } else if (receipt.status === 'completed') {
+      allowed = { supplier_id: patch.supplier_id, notes: patch.notes, document_date: patch.document_date }
+      if (patch.destination_warehouse_id && patch.destination_warehouse_id !== undefined) {
+        return { error: { message: 'تغییر انبار مقصد برای رسید تکمیل‌شده مجاز نیست' } }
+      }
+    } else {
+      return { error: { message: 'وضعیت رسید برای ویرایش پشتیبانی نمی‌شود' } }
+    }
     const cleaned = Object.fromEntries(Object.entries(allowed).filter(([_,v]) => v !== undefined))
     if (Object.keys(cleaned).length === 0) return { error: null }
     const { error } = await supabase.from('receipts').update(cleaned).eq('id', receipt_id)
