@@ -78,7 +78,8 @@ export default function Dashboard() {
       if (inventoryDetailed.error) throw new Error(inventoryDetailed.error.message)
       const today = new Date()
       const classified = inventoryDetailed.data.map(row => {
-        const expire = row.drug?.expire_date ? new Date(row.drug.expire_date) : null
+        // پس از مهاجرت، تاریخ انقضا از lot خوانده می‌شود
+        const expire = row.lot?.expire_date ? new Date(row.lot.expire_date) : null
         let diffDays = null
         let status = 'unknown'
         if (expire) {

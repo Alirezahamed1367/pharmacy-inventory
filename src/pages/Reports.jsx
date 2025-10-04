@@ -91,8 +91,8 @@ const Reports = () => {
       const inventoryData = (inventoryResult.data || []).map(item => ({
         ...item,
         drug_name: item.drug?.name,
-        // اولویت با lot.expire_date سپس drug.expire_date (legacy)
-        expire_date: item.lot?.expire_date || item.drug?.expire_date || null,
+  // تاریخ انقضا فقط از lot پس از حذف ستون drug.expire_date
+  expire_date: item.lot?.expire_date || null,
         lot_number: item.lot?.lot_number || null,
         package_type: item.drug?.package_type,
         warehouse_name: item.warehouse?.name,

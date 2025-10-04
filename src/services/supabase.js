@@ -829,7 +829,8 @@ export const getInventoryDetailed = async () => {
         id,
         quantity,
         batch_number,
-        drug:drugs(id,name,expire_date,package_type,image_url),
+        drug:drugs(id,name,package_type,image_url),
+        lot:drug_lots(expire_date,lot_number,drug_id),
         warehouse:warehouses(id,name)
       `)
     return { data: data || [], error }
@@ -892,8 +893,8 @@ export const createReceipt = async ({ supplier_id = null, destination_warehouse_
         .maybeSingle()
       lotId = defaultLot?.id || null
     }
-    // drug snapshot (until we drop expire_date column; then we may store lot.expire_date)
-    const { data: drugRow, error: drugErr } = await supabase.from('drugs').select('name, expire_date').eq('id', raw.drug_id).single()
+    // drug snapshot (expire_date ستون حذف شده است؛ فقط نام دارو را می‌خوانیم و expire_date را از lot یا ورودی می‌گیریم)
+    const { data: drugRow, error: drugErr } = await supabase.from('drugs').select('name').eq('id', raw.drug_id).single()
     if (drugErr) return { error: drugErr }
     const payload = {
       receipt_id: receiptData.id,
@@ -903,7 +904,7 @@ export const createReceipt = async ({ supplier_id = null, destination_warehouse_
       supplier_id: raw.supplier_id || supplier_id || null,
       lot_id: lotId,
       drug_name_snapshot: drugRow?.name || null,
-      expire_date_snapshot: drugRow?.expire_date || raw.expire_date || null
+      expire_date_snapshot: raw.expire_date || null
     }
     const { error: insErr } = await supabase.from('receipt_items').insert([payload])
     if (insErr) return { error: insErr }
@@ -1072,7 +1073,7 @@ export const getReceiptItems = async (receipt_id) => {
   if (!supabase) return { data: [], error: null }
   const { data, error } = await supabase
     .from('receipt_items')
-    .select('*, drugs(name, expire_date, package_type), suppliers(name), lot:drug_lots(expire_date, lot_number)')
+    .select('*, drugs(name, package_type), suppliers(name), lot:drug_lots(expire_date, lot_number)')
     .eq('receipt_id', receipt_id)
   return { data: data || [], error }
 }
@@ -1128,9 +1129,9 @@ export const createTransfer = async ({ source_warehouse_id, destination_warehous
       .eq('id', inv.id)
     if (updErr) return { error: updErr }
   // snapshot برای حواله: استخراج drug از inventory
-  const { data: snapInv, error: snapErr } = await supabase.from('inventory').select('drug_id, drug:drugs(name, expire_date)').eq('id', it.inventory_id).single()
+  const { data: snapInv, error: snapErr } = await supabase.from('inventory').select('drug_id, drug:drugs(name), lot:drug_lots(expire_date)').eq('id', it.inventory_id).single()
   if (snapErr) return { error: snapErr }
-  const row = { transfer_id: transferData.id, inventory_id: it.inventory_id, quantity_sent: it.quantity_sent, drug_name_snapshot: snapInv?.drug?.name, expire_date_snapshot: snapInv?.drug?.expire_date }
+  const row = { transfer_id: transferData.id, inventory_id: it.inventory_id, quantity_sent: it.quantity_sent, drug_name_snapshot: snapInv?.drug?.name, expire_date_snapshot: snapInv?.lot?.expire_date || null }
     if (it.lot_id || inv.lot_id) row.lot_id = it.lot_id || inv.lot_id
     const { error: insErr } = await supabase.from('transfer_items').insert([row])
     if (insErr) return { error: insErr }
@@ -1196,7 +1197,7 @@ export const getTransferItems = async (transfer_id) => {
   if (!supabase) return { data: [], error: null }
   const { data, error } = await supabase
     .from('transfer_items')
-    .select('*, inventory(id, drug_id, batch_number, lot_id, quantity, drug:drugs(name, expire_date, package_type), lot:drug_lots(expire_date, lot_number))')
+    .select('*, inventory(id, drug_id, batch_number, lot_id, quantity, drug:drugs(name, package_type), lot:drug_lots(expire_date, lot_number))')
     .eq('transfer_id', transfer_id)
   return { data: data || [], error }
 }
