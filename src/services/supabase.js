@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcryptjs'
 import { translateDbError } from '../utils/errorUtils'
+import { ALL_PERMISSIONS } from './permissions'
 
 // استفاده از environment variables برای امنیت
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co'
@@ -35,7 +36,9 @@ export const signIn = async (username, password) => {
     if (user.is_active === false) return { data: null, error: { message: 'کاربر غیرفعال است' } }
     const ok = await bcrypt.compare(password, user.password_hash || '')
     if (!ok) return { data: null, error: { message: 'نام کاربری یا رمز عبور اشتباه است' } }
-    return { data: { user }, error: null }
+  // بارگذاری گروه‌ها و مجوزها
+  const enriched = await loadUserAccess(user.id, user)
+  return { data: { user: enriched }, error: null }
   } catch (e) {
     return { data: null, error: { message: 'خطا در ورود: ' + e.message } }
   }
@@ -49,6 +52,105 @@ export const signOut = async () => {
   
   const { error } = await supabase.auth.signOut()
   return { error }
+}
+
+// =====================================================
+// Access Control Helpers
+// =====================================================
+export const loadUserAccess = async (userId, baseUser) => {
+  if (!supabase) return baseUser
+  try {
+    const [grpRes, permRes, whRes] = await Promise.all([
+      supabase.from('user_access_groups').select('group_id').eq('user_id', userId),
+      supabase.rpc ? Promise.resolve({ data: null }) : Promise.resolve({ data: null }),
+      supabase.from('access_group_warehouses').select('group_id, warehouse_id').in('group_id',
+        supabase.from('user_access_groups').select('group_id').eq('user_id', userId)
+      )
+    ])
+    const groupIds = grpRes.data?.map(g => g.group_id) || []
+    let permissions = new Set()
+    if (groupIds.length) {
+      const { data: gp } = await supabase.from('access_group_permissions').select('permission_key').in('group_id', groupIds)
+      gp?.forEach(r => { if (ALL_PERMISSIONS.includes(r.permission_key)) permissions.add(r.permission_key) })
+      const { data: wh } = await supabase.from('access_group_warehouses').select('warehouse_id').in('group_id', groupIds)
+      const warehouses = Array.from(new Set(wh?.map(w => w.warehouse_id)))
+      return { ...baseUser, access: { permissions: Array.from(permissions), warehouses, groups: groupIds } }
+    }
+    return { ...baseUser, access: { permissions: [], warehouses: [], groups: [] } }
+  } catch {
+    return { ...baseUser, access: { permissions: [], warehouses: [], groups: [] } }
+  }
+}
+
+export const accessControlAPI = {
+  listGroups: async () => {
+    if (!supabase) return { data: [], error: null }
+    return supabase.from('access_groups').select('*').order('created_at', { ascending: true })
+  },
+  createGroup: async ({ name, code, description, permissions = [], warehouseIds = [] }) => {
+    if (!supabase) return { error: { message: 'اتصال برقرار نیست' } }
+    const tName = name?.trim(); const tCode = code?.trim()
+    if (!tName || !tCode) return { error: { message: 'نام و کد گروه الزامی است' } }
+    try {
+      const { data: group, error } = await supabase.from('access_groups').insert([{ name: tName, code: tCode, description }]).select().single()
+      if (error) return { error: { message: translateDbError(error.message) } }
+      if (permissions.length) {
+        const rows = permissions.filter(p => ALL_PERMISSIONS.includes(p)).map(p => ({ group_id: group.id, permission_key: p }))
+        if (rows.length) await supabase.from('access_group_permissions').insert(rows)
+      }
+      if (warehouseIds.length) {
+        const wrows = warehouseIds.map(w => ({ group_id: group.id, warehouse_id: w }))
+        if (wrows.length) await supabase.from('access_group_warehouses').insert(wrows)
+      }
+      return { data: group }
+    } catch (e) {
+      return { error: { message: translateDbError(e.message) } }
+    }
+  },
+  updateGroup: async (groupId, { name, description, permissions, warehouseIds }) => {
+    if (!supabase) return { error: { message: 'اتصال برقرار نیست' } }
+    try {
+      if (name || description) {
+        const { error: upErr } = await supabase.from('access_groups').update({ name, description }).eq('id', groupId)
+        if (upErr) return { error: { message: translateDbError(upErr.message) } }
+      }
+      if (permissions) {
+        await supabase.from('access_group_permissions').delete().eq('group_id', groupId)
+        const rows = permissions.filter(p => ALL_PERMISSIONS.includes(p)).map(p => ({ group_id: groupId, permission_key: p }))
+        if (rows.length) await supabase.from('access_group_permissions').insert(rows)
+      }
+      if (warehouseIds) {
+        await supabase.from('access_group_warehouses').delete().eq('group_id', groupId)
+        const wrows = warehouseIds.map(w => ({ group_id: groupId, warehouse_id: w }))
+        if (wrows.length) await supabase.from('access_group_warehouses').insert(wrows)
+      }
+      return { data: true }
+    } catch (e) {
+      return { error: { message: translateDbError(e.message) } }
+    }
+  },
+  deleteGroup: async (groupId) => {
+    if (!supabase) return { error: { message: 'اتصال برقرار نیست' } }
+    try {
+      const { error } = await supabase.from('access_groups').delete().eq('id', groupId)
+      if (error) return { error: { message: translateDbError(error.message) } }
+      return { data: true }
+    } catch (e) {
+      return { error: { message: translateDbError(e.message) } }
+    }
+  },
+  assignGroupsToUser: async (userId, groupIds) => {
+    if (!supabase) return { error: { message: 'اتصال برقرار نیست' } }
+    try {
+      await supabase.from('user_access_groups').delete().eq('user_id', userId)
+      if (groupIds.length) {
+        await supabase.from('user_access_groups').insert(groupIds.map(g => ({ user_id: userId, group_id: g })))
+      }
+      return { data: true }
+    } catch (e) {
+      return { error: { message: translateDbError(e.message) } }
+    }
+  }
 }
 
 // تغییر رمز عبور

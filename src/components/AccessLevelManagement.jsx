@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   Typography,
@@ -49,103 +49,19 @@ import {
   Key as KeyIcon
 } from '@mui/icons-material';
 
-// تعریف سطوح دسترسی
-const ACCESS_LEVELS = {
-  SUPER_ADMIN: {
-    id: 'super_admin',
-    name: 'مدیر کل سیستم',
-    description: 'دسترسی کامل به تمام بخش‌ها',
-    color: 'error',
-    permissions: [
-      'user_management',
-      'system_settings',
-      'all_warehouses',
-      'all_drugs',
-      'all_receipts',
-      'reports',
-      'backup_restore',
-      'audit_logs'
-    ]
-  },
-  ADMIN: {
-    id: 'admin',
-    name: 'مدیر',
-    description: 'دسترسی به مدیریت عمومی',
-    color: 'warning',
-    permissions: [
-      'user_management_limited',
-      'all_warehouses',
-      'all_drugs',
-      'all_receipts',
-      'reports',
-      'audit_logs'
-    ]
-  },
-  WAREHOUSE_MANAGER: {
-    id: 'warehouse_manager',
-    name: 'مدیر انبار',
-    description: 'مدیریت انبار اختصاصی',
-    color: 'info',
-    permissions: [
-      'assigned_warehouse',
-      'warehouse_drugs',
-      'warehouse_receipts',
-      'warehouse_reports',
-      'inventory_management'
-    ]
-  },
-  PHARMACIST: {
-    id: 'pharmacist',
-    name: 'داروساز',
-    description: 'مدیریت دارو و تجویز',
-    color: 'success',
-    permissions: [
-      'drug_information',
-      'prescription_management',
-      'drug_reports',
-      'expiry_alerts'
-    ]
-  },
-  OPERATOR: {
-    id: 'operator',
-    name: 'اپراتور',
-    description: 'دسترسی محدود به عملیات روزانه',
-    color: 'default',
-    permissions: [
-      'basic_operations',
-      'limited_reports'
-    ]
-  }
-};
-
-// تعریف مجوزها
-const PERMISSIONS = {
-  user_management: 'مدیریت کاربران',
-  user_management_limited: 'مدیریت کاربران محدود',
-  system_settings: 'تنظیمات سیستم',
-  all_warehouses: 'دسترسی به همه انبارها',
-  assigned_warehouse: 'دسترسی به انبار اختصاصی',
-  all_drugs: 'مدیریت همه داروها',
-  warehouse_drugs: 'مدیریت داروهای انبار',
-  drug_information: 'اطلاعات دارو',
-  all_receipts: 'مدیریت همه رسیدها',
-  warehouse_receipts: 'مدیریت رسیدهای انبار',
-  prescription_management: 'مدیریت نسخه‌ها',
-  reports: 'گزارش‌گیری کامل',
-  warehouse_reports: 'گزارش‌گیری انبار',
-  drug_reports: 'گزارش‌گیری دارو',
-  limited_reports: 'گزارش‌گیری محدود',
-  inventory_management: 'مدیریت موجودی',
-  backup_restore: 'پشتیبان‌گیری و بازیابی',
-  audit_logs: 'لاگ‌های حسابرسی',
-  expiry_alerts: 'هشدارهای انقضا',
-  basic_operations: 'عملیات پایه'
-};
+import { PERMISSION_GROUPS, ALL_PERMISSIONS } from '../services/permissions';
+import { accessControlAPI, supabase } from '../services/supabase';
 
 // کاربران از دیتابیس Supabase دریافت می‌شوند
 
 const AccessLevelManagement = () => {
   const [users, setUsers] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [groupDialog, setGroupDialog] = useState(false);
+  const [groupForm, setGroupForm] = useState({ id: null, name: '', code: '', description: '', permissions: [], warehouseIds: [] });
+  const [loadingGroups, setLoadingGroups] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [formData, setFormData] = useState({
@@ -182,11 +98,49 @@ const AccessLevelManagement = () => {
         accessLevel: 'operator',
         assignedWarehouses: [],
         isActive: true,
-        permissions: ACCESS_LEVELS.operator.permissions
+        permissions: []
       });
     }
     setOpenDialog(true);
   };
+
+  const loadGroups = async () => {
+    setLoadingGroups(true)
+    const { data } = await accessControlAPI.listGroups()
+    setGroups(data || [])
+    const { data: wh } = await supabase.from('warehouses').select('id,name')
+    setWarehouses(wh || [])
+    setLoadingGroups(false)
+  }
+
+  useEffect(() => {
+    loadGroups()
+  }, [])
+
+  const openGroupCreate = () => {
+    setGroupForm({ id: null, name: '', code: '', description: '', permissions: [], warehouseIds: [] })
+    setGroupDialog(true)
+  }
+  const editGroup = (g) => {
+    setGroupForm({ id: g.id, name: g.name, code: g.code, description: g.description || '', permissions: [], warehouseIds: [] })
+    setGroupDialog(true)
+  }
+  const saveGroup = async () => {
+    if (!groupForm.name || !groupForm.code) { setErrorMsg('نام و کد اجباری است'); return }
+    if (groupForm.id) {
+      await accessControlAPI.updateGroup(groupForm.id, { name: groupForm.name, description: groupForm.description, permissions: groupForm.permissions, warehouseIds: groupForm.warehouseIds })
+    } else {
+      await accessControlAPI.createGroup({ name: groupForm.name, code: groupForm.code, description: groupForm.description, permissions: groupForm.permissions, warehouseIds: groupForm.warehouseIds })
+    }
+    setGroupDialog(false)
+    loadGroups()
+  }
+  const togglePermission = (perm) => {
+    setGroupForm(f => ({ ...f, permissions: f.permissions.includes(perm) ? f.permissions.filter(p => p !== perm) : [...f.permissions, perm] }))
+  }
+  const toggleWarehouse = (wid) => {
+    setGroupForm(f => ({ ...f, warehouseIds: f.warehouseIds.includes(wid) ? f.warehouseIds.filter(i => i !== wid) : [...f.warehouseIds, wid] }))
+  }
 
   const handleCloseDialog = () => {
     setOpenDialog(false);
@@ -277,33 +231,31 @@ const AccessLevelManagement = () => {
         </Button>
       </Box>
 
-      {/* Access Levels Overview */}
+      {/* Access Groups Management */}
       <Card sx={{ mb: 4 }}>
         <CardContent>
-          <Typography variant="h6" gutterBottom>
-            سطوح دسترسی تعریف شده
-          </Typography>
+          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+            <Typography variant="h6">گروه‌های دسترسی ({groups.length})</Typography>
+            <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={openGroupCreate}>گروه جدید</Button>
+          </Box>
           <Grid container spacing={2}>
-            {Object.values(ACCESS_LEVELS).map((level) => (
-              <Grid item xs={12} md={6} lg={4} key={level.id}>
+            {groups.map(g => (
+              <Grid item xs={12} md={6} lg={4} key={g.id}>
                 <Card variant="outlined">
                   <CardContent>
-                    <Box display="flex" alignItems="center" mb={1}>
-                      <SecurityIcon color={level.color} sx={{ mr: 1 }} />
-                      <Typography variant="subtitle1" fontWeight="bold">
-                        {level.name}
-                      </Typography>
+                    <Box display="flex" justifyContent="space-between" alignItems="center">
+                      <Typography fontWeight="bold">{g.name}</Typography>
+                      <IconButton size="small" onClick={() => editGroup(g)}><EditIcon fontSize="small" /></IconButton>
                     </Box>
-                    <Typography variant="body2" color="text.secondary" gutterBottom>
-                      {level.description}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {level.permissions.length} مجوز
-                    </Typography>
+                    <Typography variant="caption" color="text.secondary">{g.code}</Typography>
+                    {g.description && <Typography variant="body2" sx={{ mt: 1 }}>{g.description}</Typography>}
                   </CardContent>
                 </Card>
               </Grid>
             ))}
+            {groups.length === 0 && (
+              <Grid item xs={12}><Alert severity="info">گروهی ثبت نشده است.</Alert></Grid>
+            )}
           </Grid>
         </CardContent>
       </Card>
@@ -311,9 +263,7 @@ const AccessLevelManagement = () => {
       {/* Users Table */}
       <Card>
         <CardContent>
-          <Typography variant="h6" gutterBottom>
-            فهرست کاربران ({users.length} کاربر)
-          </Typography>
+          <Typography variant="h6" gutterBottom>فهرست کاربران (نمونه محلی - اتصال واقعی بعداً)</Typography>
           <TableContainer component={Paper} sx={{ mt: 2 }}>
             <Table>
               <TableHead>
@@ -525,6 +475,45 @@ const AccessLevelManagement = () => {
           <Button variant="contained" onClick={handleSave}>
             {selectedUser ? 'ویرایش' : 'ایجاد کاربر'}
           </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog open={groupDialog} onClose={() => setGroupDialog(false)} fullWidth maxWidth="md">
+        <DialogTitle>{groupForm.id ? 'ویرایش گروه' : 'گروه جدید'}</DialogTitle>
+        <DialogContent dividers>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={4}>
+              <TextField label="نام گروه" fullWidth value={groupForm.name} onChange={e => setGroupForm({ ...groupForm, name: e.target.value })} sx={{ mb: 2 }} />
+              <TextField label="کد" fullWidth value={groupForm.code} onChange={e => setGroupForm({ ...groupForm, code: e.target.value })} sx={{ mb: 2 }} disabled={!!groupForm.id} />
+              <TextField label="توضیحات" fullWidth multiline minRows={3} value={groupForm.description} onChange={e => setGroupForm({ ...groupForm, description: e.target.value })} />
+              {errorMsg && <Alert severity="error" sx={{ mt: 2 }}>{errorMsg}</Alert>}
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Typography variant="subtitle2" gutterBottom>مجوزها</Typography>
+              {PERMISSION_GROUPS.map(pg => (
+                <Box key={pg.key} sx={{ mb: 1 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 'bold' }}>{pg.label}</Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: .5, mt: .5 }}>
+                    {pg.permissions.map(p => (
+                      <Chip key={p.key} label={p.label} size="small" color={groupForm.permissions.includes(p.key) ? 'primary' : 'default'} onClick={() => togglePermission(p.key)} />
+                    ))}
+                  </Box>
+                </Box>
+              ))}
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Typography variant="subtitle2" gutterBottom>انبارهای مجاز</Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: .5 }}>
+                {warehouses.map(w => (
+                  <Chip key={w.id} label={w.name} variant={groupForm.warehouseIds.includes(w.id) ? 'filled' : 'outlined'} color={groupForm.warehouseIds.includes(w.id) ? 'success' : 'default'} onClick={() => toggleWarehouse(w.id)} />
+                ))}
+                {warehouses.length === 0 && <Typography variant="caption">انبار ثبت نشده</Typography>}
+              </Box>
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setGroupDialog(false)}>انصراف</Button>
+          <Button onClick={saveGroup} variant="contained">ذخیره</Button>
         </DialogActions>
       </Dialog>
     </Box>
