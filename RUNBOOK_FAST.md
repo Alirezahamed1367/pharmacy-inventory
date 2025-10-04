@@ -34,6 +34,11 @@ npm run dev
 4. ایجاد یک Transfer بین دو انبار و تکمیل → بررسی موجودی مقصد
 5. آپلود تصویر دارو
 6. اجرای `npm run smoke`
+ 7. (اختیاری) اجرای Seed خودکار:
+	```bash
+	npm run seed:demo
+	```
+	سپس فقط تست Transfer / Receipt را انجام دهید.
 
 ## 6. دیپلوی
 - Vercel: اتصال مخزن و Build command: `npm run build`

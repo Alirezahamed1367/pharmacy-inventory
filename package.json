@@ -23,6 +23,7 @@
     "smoke": "node ./scripts/smokeCheck.mjs",
     "audit:lots": "node ./scripts/auditLots.mjs",
     "perf:images": "node ./scripts/perfImageTest.mjs"
+    "seed:demo": "node ./scripts/seedDemo.mjs",
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",
