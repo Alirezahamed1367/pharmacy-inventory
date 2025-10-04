@@ -228,4 +228,3 @@ const AccessLevelManagement = () => {
 };
 
 export default AccessLevelManagement;
-                {errorMsg && <Alert severity="error" sx={{ mt: 2 }}>{errorMsg}</Alert>}
