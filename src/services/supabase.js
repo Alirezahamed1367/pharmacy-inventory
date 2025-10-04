@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcryptjs'
+import { translateDbError } from '../utils/errorUtils'
 
 // استفاده از environment variables برای امنیت
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co'
@@ -57,10 +58,11 @@ export const changePassword = async (userId, currentPassword, newPassword) => {
     // دریافت password_hash برای کاربر
     const { data: user, error: userErr } = await supabase
       .from('users')
-      .select('id, password_hash')
+      .select('id, password_hash, username')
       .eq('id', userId)
       .single()
     if (userErr || !user) return { error: { message: 'کاربر یافت نشد' } }
+    if (user.username === 'superadmin') return { error: { message: 'تغییر رمز عبور کاربر سوپر ادمین مجاز نیست' } }
 
     const valid = await bcrypt.compare(currentPassword, user.password_hash || '')
     if (!valid) return { error: { message: 'رمز عبور فعلی اشتباه است' } }
@@ -70,10 +72,10 @@ export const changePassword = async (userId, currentPassword, newPassword) => {
       .from('users')
       .update({ password_hash: newHash })
       .eq('id', userId)
-    if (updErr) return { error: { message: 'خطا در تغییر رمز عبور: ' + updErr.message } }
+    if (updErr) return { error: { message: 'خطا در تغییر رمز عبور: ' + translateDbError(updErr.message) } }
     return { error: null }
   } catch (e) {
-    return { error: { message: 'خطا در تغییر رمز عبور: ' + e.message } }
+    return { error: { message: 'خطا در تغییر رمز عبور: ' + translateDbError(e.message) } }
   }
 }
 
@@ -291,11 +293,11 @@ export const addDrug = async (drugData) => {
       if (error.message && (error.message.includes('duplicate key') || error.message.includes('unique constraint')) ) {
         return { error: { message: 'این ترکیب (نام + بسته‌بندی + تاریخ انقضا) قبلاً وجود دارد' } }
       }
-      return { error }
+      return { error: { message: translateDbError(error.message) } }
     }
     return { data: data[0], error: null }
   } catch (error) {
-    return { error: { message: 'خطا در افزودن دارو: ' + error.message } }
+    return { error: { message: 'خطا در افزودن دارو: ' + translateDbError(error.message) } }
   }
 }
 
@@ -313,10 +315,10 @@ export const updateDrug = async (id, drugData) => {
       .update({ name, description: description || null, package_type: package_type || null, expire_date, image_url: image_url || null })
       .eq('id', id)
       .select()
-    if (error) return { error }
+    if (error) return { error: { message: translateDbError(error.message) } }
     return { data: data[0], error: null }
   } catch (error) {
-    return { error: { message: 'خطا در ویرایش دارو: ' + error.message } }
+    return { error: { message: 'خطا در ویرایش دارو: ' + translateDbError(error.message) } }
   }
 }
 
@@ -350,7 +352,7 @@ export const deleteDrug = async (id) => {
 
     return { error }
   } catch (error) {
-    return { error: { message: 'خطا در حذف دارو: ' + error.message } }
+    return { error: { message: translateDbError(error.message) } }
   }
 }
 
@@ -419,12 +421,12 @@ export const addWarehouse = async (warehouseData) => {
   .select('id,name,location,manager_user_id,created_at')
 
     if (error) {
-      return { error }
+      return { error: { message: translateDbError(error.message) } }
     }
 
     return { data: inserted[0], error: null }
   } catch (error) {
-    return { error: { message: 'خطا در افزودن انبار: ' + error.message } }
+    return { error: { message: translateDbError(error.message) } }
   }
 }
 
@@ -447,12 +449,12 @@ export const updateWarehouse = async (id, warehouseData) => {
       .eq('id', id)
       .select('id,name,location,manager_user_id,created_at,updated_at')
     if (error) {
-      return { error }
+      return { error: { message: translateDbError(error.message) } }
     }
 
     return { data: data[0], error: null }
   } catch (error) {
-    return { error: { message: 'خطا در ویرایش انبار: ' + error.message } }
+    return { error: { message: translateDbError(error.message) } }
   }
 }
 
@@ -497,12 +499,12 @@ export const deleteWarehouse = async (id) => {
       .eq('id', id)
 
     if (error) {
-      return { error }
+      return { error: { message: translateDbError(error.message) } }
     }
 
     return { error: null }
   } catch (error) {
-    return { error: { message: 'خطا در حذف انبار: ' + error.message } }
+    return { error: { message: translateDbError(error.message) } }
   }
 }
 
@@ -806,8 +808,8 @@ export const updateReceipt = async (receipt_id, patch) => {
     const cleaned = Object.fromEntries(Object.entries(allowed).filter(([_,v]) => v !== undefined))
     if (Object.keys(cleaned).length === 0) return { error: null }
     const { error } = await supabase.from('receipts').update(cleaned).eq('id', receipt_id)
-    return { error }
-  } catch (e) { return { error: { message: 'خطا در ویرایش رسید: ' + e.message } } }
+    return { error: error ? { message: translateDbError(error.message) } : null }
+  } catch (e) { return { error: { message: 'خطا در ویرایش رسید: ' + translateDbError(e.message) } } }
 }
 
 // ویرایش آیتم رسید (تغییر تعداد یا تامین‌کننده) در pending
