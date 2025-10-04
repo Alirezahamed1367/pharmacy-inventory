@@ -19,7 +19,8 @@ export const isBackendAvailable = () => !!(import.meta.env.VITE_SUPABASE_URL && 
 export const STORAGE_CONFIG = {
   drugImagesBucket: 'drug-images',
   maxFileSize: 1 * 1024 * 1024, // 1MB
-  allowedTypes: ['image/jpeg'],
+  // پذیرش همه انواع تصویر (برای جلوگیری از خطاهای فرمت)
+  allowedTypes: ['image/jpeg','image/png','image/webp','image/gif','image/svg+xml','image/bmp','image/tiff'],
   uploadPath: 'drugs' // پوشه داخل bucket
 }
 
@@ -331,9 +332,9 @@ export const uploadImage = async (file, bucket = 'drug-images') => {
   }
 
   try {
-    // اعتبارسنجی اندازه و نوع
-    if (!STORAGE_CONFIG.allowedTypes.includes(file.type)) {
-      return { data: null, error: { message: 'فرمت فایل مجاز نیست' } }
+    // اعتبارسنجی اندازه (نوع را فقط بررسی می‌کنیم که image/* باشد)
+    if (!file.type.startsWith('image/')) {
+      return { data: null, error: { message: 'فایل انتخابی تصویر نیست' } }
     }
     if (file.size > STORAGE_CONFIG.maxFileSize) {
       return { data: null, error: { message: 'حجم فایل بزرگ‌تر از حد مجاز است' } }

@@ -25,7 +25,7 @@ const ImageUpload = ({
   value = null, 
   onChange, 
   label = "آپلود تصویر",
-  accept = "image/jpeg",
+  accept = "image/*",
   maxSize = 1, // MB (raw file max before compression attempt)
   bucket = "drug-images",
   targetMaxKB = 300, // هدف نهایی حجم پس از فشرده‌سازی
@@ -39,17 +39,13 @@ const ImageUpload = ({
   const fileInputRef = useRef(null)
 
   const validateFile = (file) => {
-    // بررسی نوع فایل
-    if (file.type !== 'image/jpeg') {
-      throw new Error('فقط فایل JPG (JPEG) مجاز است')
+    if (!file.type.startsWith('image/')) {
+      throw new Error('فایل انتخابی تصویر نیست')
     }
-
-    // بررسی حجم فایل
     const fileSizeMB = file.size / (1024 * 1024)
     if (fileSizeMB > maxSize) {
       throw new Error(`حجم فایل نباید بیشتر از ${maxSize} مگابایت باشد`)
     }
-
     return true
   }
 
@@ -126,6 +122,8 @@ const ImageUpload = ({
     if (!file) return
 
     try {
+      // پاک کردن خطای قبلی بلافاصله پس از انتخاب فایل جدید
+      if (error) setError(null)
       validateFile(file)
       setError(null)
       setInfo(null)
@@ -228,7 +226,7 @@ const ImageUpload = ({
       {/* دکمه آپلود */}
       {!value && (
         <Card 
-          sx={{ 
+            sx={{ 
             border: '2px dashed',
             borderColor: uploading ? 'primary.main' : 'grey.300',
             backgroundColor: uploading ? 'primary.50' : 'grey.50',
@@ -239,7 +237,7 @@ const ImageUpload = ({
               backgroundColor: 'primary.50'
             }
           }}
-          onClick={uploading ? undefined : handleButtonClick}
+            // حذف onClick سطح Card برای جلوگیری از باز شدن دوباره دیالوگ
         >
           <CardContent sx={{ textAlign: 'center', py: 4 }}>
             <ImageIcon 
@@ -253,7 +251,7 @@ const ImageUpload = ({
               {uploading ? 'در حال آپلود...' : label}
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              فقط فایل JPG (حداکثر {maxSize}MB)
+              فرمت‌های مجاز: همه تصاویر (حداکثر {maxSize}MB)
             </Typography>
             {!uploading && (
               <Button
