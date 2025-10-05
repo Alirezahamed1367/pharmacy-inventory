@@ -23,7 +23,8 @@ import {
   Lock,
   LocalPharmacy,
 } from '@mui/icons-material'
-import { signIn, supabase } from '../services/supabase'
+import backendProvider from '../services/backendProvider'
+const { apiLogin, isApiConfigured } = backendProvider
 
 export default function LoginPage({ onLogin }) {
   const [formData, setFormData] = useState({
@@ -45,7 +46,7 @@ export default function LoginPage({ onLogin }) {
     setUsers(baseUsers)
 
     // اگر Supabase تنظیم نشده تلاش دیتابیس انجام نمی‌دهیم (حالت آفلاین ساده)
-    if (!supabase) return
+    if (!isApiConfigured()) return
 
     const fetchUsers = async () => {
       try {
@@ -109,19 +110,17 @@ export default function LoginPage({ onLogin }) {
       }
 
       // اگر Supabase نیست، همینجا تمام
-      if (!supabase) {
+      if (!isApiConfigured()) {
         setError('نام کاربری یا رمز عبور اشتباه است')
         return
       }
 
       // احراز هویت از دیتابیس
-      const result = await signIn(formData.username, formData.password)
+      const result = await apiLogin(formData.username, formData.password)
       if (result.error || !result.data?.user) {
         setError('نام کاربری یا رمز عبور اشتباه است')
         return
       }
-      localStorage.setItem('currentUser', JSON.stringify(result.data.user))
-      localStorage.setItem('userRole', result.data.user.role)
       onLogin(result.data.user)
 
     } catch {

@@ -14,7 +14,8 @@ import {
   Delete as DeleteIcon,
   Image as ImageIcon,
 } from '@mui/icons-material'
-import { uploadImage } from '../services/supabase'
+import backendProvider from '../services/backendProvider'
+const { uploadImageFile } = backendProvider
 import ImageViewer from './ImageViewer'
 import { guardOffline, buildUserError } from '../utils/errorUtils'
 
@@ -147,7 +148,7 @@ const ImageUpload = ({
       // ادامه نوار پیشرفت تا قبل از پایان
       setProgress(90)
 
-      const result = await uploadImage(compressedFile, bucket)
+      const result = await uploadImageFile(compressedFile)
 
       clearInterval(progressInterval)
       setProgress(100)

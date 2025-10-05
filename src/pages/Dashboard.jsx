@@ -26,10 +26,11 @@ import {
   Inventory as InventoryIcon,
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
-import { supabase, getInventoryDetailed, isBackendAvailable } from '../services/supabase'
+import backendProvider from '../services/backendProvider'
+const { getInventory, getDrugs, getWarehouses, createReceipt, createTransfer, getReceipts: apiGetReceipts, getTransfers: apiGetTransfers, isApiConfigured } = backendProvider
 import Skeleton from '@mui/material/Skeleton'
-  import { supabase, getInventoryDetailed, isBackendAvailable, checkBackendReachable } from '../services/supabase'
-  import { calcBackoff, wait } from '../utils/networkUtils'
+import { calcBackoff, wait } from '../utils/networkUtils'
+import dayjs from 'dayjs'
 import 'dayjs/locale/fa'
 
 dayjs.locale('fa')
@@ -44,104 +45,84 @@ export default function Dashboard() {
   const [error, setError] = useState(null)
   const navigate = useNavigate()
 
-    const [reachability, setReachability] = useState({ checking: true, ok: true, attempts: 0, lastError: null })
-  useEffect(() => {
-    if (!isBackendAvailable()) {
-      // داده نمایشی برای حالت آفلاین
-      setData({
-        stats: { totalDrugs: 0, totalWarehouses: 0, expiringSoon: 0, expired: 0 },
-        recentActivities: [],
-        expiringDrugs: []
-      })
-      setError(null)
-      setLoading(false)
-      return
+  const [reachability, setReachability] = useState({ checking: true, ok: true, attempts: 0, lastError: null })
+
+  // ساده: چک سلامت بک‌اند (Fastify یا PocketBase)
+  async function checkBackendReachable({ timeoutMs = 2500 } = {}) {
+    const mode = import.meta.env.VITE_BACKEND_MODE || 'fastify'
+    const urls = []
+    if (mode === 'pocketbase') urls.push(`${import.meta.env.VITE_PB_URL || 'http://127.0.0.1:8090'}/api/health`)
+    urls.push(`${import.meta.env.VITE_API_URL || 'http://localhost:4000'}/health`)
+    for (const u of urls) {
+      try {
+        const controller = new AbortController()
+        const t = setTimeout(() => controller.abort(), timeoutMs)
+        const res = await fetch(u, { signal: controller.signal })
+        clearTimeout(t)
+        if (res.ok) return { ok: true }
+      } catch (_) { /* ignore and try next */ }
     }
-    fetchDashboardData()
-  }, [])
-      initLoad()
-  const fetchDashboardData = async () => {
+    return { ok: false, error: new Error('backend unreachable') }
+  }
+
+  const classifyInventory = (rows) => {
+    const today = new Date()
+    return (rows || []).map(row => {
+      const expireRaw = row.expire_date || row.expireDate || row?.lot?.expire_date
+      const expire = expireRaw ? new Date(expireRaw) : null
+      let diffDays = null
+      let status = 'unknown'
+      if (expire) {
+        diffDays = Math.ceil((expire - today) / 86400000)
+        if (diffDays < 0) status = 'expired'
+        else if (diffDays <= 30) status = 'soon'
+        else if (diffDays <= 90) status = 'mid'
+        else status = 'healthy'
+      }
+      return {
+        ...row,
+        diffDays,
+        status,
+        name: row.drug_name || row.name || '---',
+        warehouse: row.warehouse_name || row.warehouse || '---',
+        expireDate: expire ? expire.toLocaleDateString('fa-IR') : 'نامشخص',
+        quantity: row.quantity
+      }
+    })
+  }
+
+  const loadData = async () => {
     setLoading(true)
-    const initLoad = async () => {
-      // ابتدا چک دسترس پذیری با backoff
-      if (!isBackendAvailable()) {
-        setReachability({ checking: false, ok: false, attempts: 0, lastError: new Error('پیکربندی سرور موجود نیست') })
-        setLoading(false)
-        return
-      }
-      let ok = false
-      let lastErr = null
-      for (let attempt = 0; attempt < 3; attempt++) {
-        setReachability(r => ({ ...r, checking: true, attempts: attempt+1 }))
-        const res = await checkBackendReachable({ timeoutMs: 2500 })
-        if (res.ok) { ok = true; break }
-        lastErr = res.error
-        const delay = calcBackoff(attempt, 900)
-        await wait(delay)
-      }
-      setReachability({ checking: false, ok, attempts: ok ? 1 : 3, lastError: ok ? null : lastErr })
-      if (!ok) {
-        // نمایش حالت نیمه آفلاین، بارگذاری کامل را متوقف می‌کنیم ولی اجازه Retry
-        setLoading(false)
-        return
-      }
-      fetchDashboardData()
-    }
-
-    const fetchDashboardData = async () => {
-      // تعداد کل داروها (هر واریانت یک ردیف)
-      const { data: drugsData, error: drugsError } = await supabase
-        .from('drugs')
-        .select('id')
-      if (drugsError) throw drugsError
-
-      // تعداد کل انبارها
-      const { data: warehousesData, error: warehousesError } = await supabase
-        .from('warehouses')
-        .select('id')
-      if (warehousesError) throw warehousesError
-
-      // موجودی تفصیلی جهت محاسبه وضعیت انقضا
-      const inventoryDetailed = await getInventoryDetailed()
-      if (inventoryDetailed.error) throw new Error(inventoryDetailed.error.message)
-      const today = new Date()
-      const classified = inventoryDetailed.data.map(row => {
-        // پس از مهاجرت، تاریخ انقضا از lot خوانده می‌شود
-        const expire = row.lot?.expire_date ? new Date(row.lot.expire_date) : null
-        let diffDays = null
-        let status = 'unknown'
-        if (expire) {
-          diffDays = Math.ceil((expire - today) / 86400000)
-          if (diffDays < 0) status = 'expired'
-          else if (diffDays <= 30) status = 'soon'
-          else if (diffDays <= 90) status = 'mid'
-          else status = 'healthy'
-        }
-        return { ...row, diffDays, status, drug_name: row.drug?.name }
-      })
+    try {
+      const drugsRes = await getDrugs(); if (drugsRes.error) throw new Error(drugsRes.error.message)
+      const warehousesRes = await getWarehouses(); if (warehousesRes.error) throw new Error(warehousesRes.error.message)
+      const inventoryRes = await getInventory(); if (inventoryRes.error) throw new Error(inventoryRes.error.message)
+      const classified = classifyInventory(inventoryRes.data)
       const expiringSoon = classified.filter(r => r.status === 'soon')
       const expired = classified.filter(r => r.status === 'expired')
 
-      // فعلاً فعالیت‌های اخیر: 5 آخرین رسید یا حواله (ساده‌سازی)
       const recent = []
-      const { data: lastReceipts } = await supabase.from('receipts').select('id, created_at, status').order('created_at', { ascending: false }).limit(3)
-      const { data: lastTransfers } = await supabase.from('transfers').select('id, created_at, status').order('created_at', { ascending: false }).limit(3)
-      if (lastReceipts) lastReceipts.forEach(r => recent.push({ type: 'receipt', ...r }))
-      if (lastTransfers) lastTransfers.forEach(t => recent.push({ type: 'transfer', ...t }))
-      recent.sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
-      const recentActivities = recent.slice(0,5)
+      const receiptsRes = await apiGetReceipts(); if (!receiptsRes.error) receiptsRes.data.slice(0,3).forEach(r => recent.push({ type: 'receipt', ...r }))
+      const transfersRes = await apiGetTransfers(); if (!transfersRes.error) transfersRes.data.slice(0,3).forEach(t => recent.push({ type: 'transfer', ...t }))
+      recent.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      const recentActivities = recent.slice(0, 5).map(r => ({
+        id: r.id,
+        type: r.type === 'receipt' ? 'add' : r.type,
+        message: r.type === 'receipt' ? 'رسید جدید' : 'انتقال',
+        time: r.created_at ? new Date(r.created_at).toLocaleString('fa-IR') : '',
+        user: r.created_by_user_id || 'سیستم'
+      }))
 
       setData({
         stats: {
-          totalDrugs: drugsData?.length || 0,
-          totalWarehouses: warehousesData?.length || 0,
+          totalDrugs: drugsRes.data?.length || 0,
+          totalWarehouses: warehousesRes.data?.length || 0,
           expiringSoon: expiringSoon.length,
           expired: expired.length
         },
         recentActivities,
-        expiringDrugs: expiringSoon.slice(0,5)
+        expiringDrugs: expiringSoon.slice(0, 5)
       })
-
       setError(null)
     } catch (err) {
       console.error('خطا در دریافت داده‌های داشبورد:', err)
@@ -151,27 +132,50 @@ export default function Dashboard() {
     }
   }
 
+  const initLoad = async () => {
+    if (!isApiConfigured()) {
+      setData({
+        stats: { totalDrugs: 0, totalWarehouses: 0, expiringSoon: 0, expired: 0 },
+        recentActivities: [],
+        expiringDrugs: []
+      })
+      setReachability(r => ({ ...r, checking: false, ok: false }))
+      setLoading(false)
+      return
+    }
+    let ok = false
+    let lastErr = null
+    for (let attempt = 0; attempt < 3; attempt++) {
+      setReachability(r => ({ ...r, checking: true, attempts: attempt + 1 }))
+      const res = await checkBackendReachable({ timeoutMs: 2500 })
+      if (res.ok) { ok = true; break }
+      lastErr = res.error
+      await wait(calcBackoff(attempt, 800))
+    }
+    setReachability({ checking: false, ok, attempts: ok ? 1 : 3, lastError: ok ? null : lastErr })
+    if (!ok) return
+    await loadData()
+  }
+
+  useEffect(() => { initLoad() }, [])
+
+  const handleRetry = () => {
+    setError(null)
+    setReachability(r => ({ ...r, checking: true }))
+    initLoad()
+  }
+
   const handleQuickAction = (action) => {
     switch (action) {
-    const handleRetry = () => {
-      setError(null)
-      setReachability(r => ({ ...r, checking: true }))
-      initLoad()
-    }
       case 'add-drug':
-        navigate('/drugs')
-        break
+        navigate('/drugs'); break
       case 'add-warehouse':
-        navigate('/warehouses')
-        break
+        navigate('/warehouses'); break
       case 'transfer':
-        navigate('/warehouses')
-        break
+        navigate('/warehouses'); break
       case 'reports':
-        navigate('/reports')
-        break
-      default:
-        break
+        navigate('/reports'); break
+      default: break
     }
   }
 

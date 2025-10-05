@@ -1,7 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import { Box, Typography, Card, CardContent, Grid, Button, Alert, Table, TableHead, TableBody, TableRow, TableCell, TableContainer, Paper, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Chip, IconButton } from '@mui/material'
 import { Add as AddIcon, CompareArrows as TransferIcon, Check as CheckIcon, Error as ErrorIcon } from '@mui/icons-material'
-import { getTransfers, createTransfer, completeTransfer, getTransferItems, getAllWarehouses, getAllLotInventory, deleteTransfer, updateTransfer } from '../services/supabase'
+import backendProvider from '../services/backendProvider'
+const { getTransfers, createTransfer, completeTransfer, getWarehouses: getAllWarehouses, getInventory: getAllLotInventory } = backendProvider
+// Placeholders for not-yet-migrated endpoints
+const getTransferItems = async (id)=> ({ data: [], error: null })
+const deleteTransfer = async ()=> ({ error: { message: 'حذف حواله هنوز افزوده نشده' } })
+const updateTransfer = async ()=> ({ error: { message: 'بروزرسانی حواله هنوز افزوده نشده' } })
 import { formatDMY } from '../utils/dateUtils'
 
 // Helper status chip

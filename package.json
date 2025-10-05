@@ -24,7 +24,8 @@
     "audit:lots": "node ./scripts/auditLots.mjs",
   "perf:images": "node ./scripts/perfImageTest.mjs",
   "seed:demo": "node ./scripts/seedDemo.mjs",
-  "cleanup:zero": "node ./scripts/cleanupZeroInventory.mjs"
+  "cleanup:zero": "node ./scripts/cleanupZeroInventory.mjs",
+  "pb:init": "node ./scripts/pbInit.mjs"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",
@@ -42,7 +43,8 @@
     "react-router-dom": "^7.9.3",
     "stylis": "^4.3.6",
     "stylis-plugin-rtl": "^2.1.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+  "pocketbase": "^0.21.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

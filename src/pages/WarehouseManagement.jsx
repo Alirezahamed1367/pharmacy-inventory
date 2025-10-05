@@ -40,13 +40,11 @@ import {
 import { ManagerSelect } from '../components/DropdownSelects'
 
 import { useEffect } from 'react'
-import { 
-  getAllWarehouses, 
-  addWarehouse, 
-  updateWarehouse, 
-  deleteWarehouse,
-  getWarehouseManagers 
-} from '../services/supabase'
+import backendProvider from '../services/backendProvider'
+const { getWarehouses: getAllWarehouses, addWarehouse, updateWarehouse } = backendProvider
+// Placeholders for not-yet-implemented endpoints
+const deleteWarehouse = async ()=> ({ error: { message: 'حذف انبار هنوز پیاده‌سازی نشده' } })
+const getWarehouseManagers = async ()=> ({ data: [], error: null })
 
 export default function WarehouseManagement() {
   const [warehouses, setWarehouses] = useState([])

@@ -34,7 +34,8 @@ import {
   SwapHoriz as MovementIcon,
   Warning as WarningIcon,
 } from '@mui/icons-material'
-import { getInventoryDetailed, getWarehouses, getActiveDrugs, isBackendAvailable, getExpiryReport } from '../services/supabase'
+import backendProvider from '../services/backendProvider'
+const { getInventory, getWarehouses, getDrugs: getActiveDrugs, isApiConfigured } = backendProvider
 import Skeleton from '@mui/material/Skeleton'
 import ExpiryChip from '../components/ExpiryChip'
 
@@ -66,7 +67,7 @@ const Reports = () => {
 
   // دریافت داده‌ها از دیتابیس
   useEffect(() => {
-    if (!isBackendAvailable()) {
+  if (!isApiConfigured()) {
       setLoading(false)
       setError(null)
       return
@@ -77,16 +78,14 @@ const Reports = () => {
   const fetchReportsData = async () => {
     setLoading(true)
     try {
-      const [inventoryResult, warehousesResult, drugsResult, expiryReportRes] = await Promise.all([
-        getInventoryDetailed(),
+      const [inventoryResult, warehousesResult, drugsResult] = await Promise.all([
+        getInventory(),
         getWarehouses(),
-        getActiveDrugs(),
-        getExpiryReport()
+        getActiveDrugs()
       ])
       if (inventoryResult.error) throw new Error(inventoryResult.error.message)
       if (warehousesResult.error) throw new Error(warehousesResult.error.message)
       if (drugsResult.error) throw new Error(drugsResult.error.message)
-      if (expiryReportRes.error) throw new Error(expiryReportRes.error.message)
 
       const inventoryData = (inventoryResult.data || []).map(item => ({
         ...item,
@@ -99,7 +98,7 @@ const Reports = () => {
         image_url: item.drug?.image_url
       }))
   setInventory(inventoryData)
-      setExpiryLots(expiryReportRes.data || [])
+  setExpiryLots([])
       setWarehouses(warehousesResult.data || [])
       setDrugs(drugsResult.data || [])
 

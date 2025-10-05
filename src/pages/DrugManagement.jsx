@@ -29,7 +29,8 @@ import {
   Delete as DeleteIcon,
   Image as ImageIcon
 } from '@mui/icons-material'
-import { getDrugs, addDrug, updateDrug, deleteDrug } from '../services/supabase'
+import backendProvider from '../services/backendProvider'
+const { getDrugs, addDrug, updateDrug, deleteDrug } = backendProvider
 import ImageUpload from '../components/ImageUpload'
 import ImageViewer from '../components/ImageViewer'
 import { buildUserError, guardOffline, isOffline } from '../utils/errorUtils'
@@ -75,9 +76,7 @@ const DrugManagement = () => {
   const loadData = async () => {
     try {
       const drugsResult = await getDrugs()
-      if (drugsResult.data) {
-        setDrugs(drugsResult.data)
-      }
+      if (drugsResult.data) setDrugs(drugsResult.data)
     } catch (error) {
       console.error('خطا در بارگذاری داده‌ها:', error)
       setAlert({ type: 'error', message: 'خطا در بارگذاری داده‌ها' })

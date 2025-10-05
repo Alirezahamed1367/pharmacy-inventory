@@ -1,0 +1,173 @@
+[
+  {
+      "id": "col_users_01",
+      "name": "users",
+      "type": "auth",
+      "system": false,
+      "schema": [
+        { "id": "fld_user_username", "name": "username", "type": "text", "system": false, "required": true, "unique": true, "options": { "min": 3, "max": 50, "pattern": "" } },
+        { "id": "fld_user_role", "name": "role", "type": "select", "system": false, "required": true, "unique": false, "options": { "maxSelect": 1, "values": ["super_admin", "admin", "manager"] } },
+        { "id": "fld_user_active", "name": "is_active", "type": "bool", "system": false, "required": false, "unique": false, "options": {} }
+      ],
+      "indexes": ["CREATE UNIQUE INDEX idx_users_username ON users (username)"] ,
+      "listRule": null,
+      "viewRule": "@request.auth.id != ''",
+      "createRule": null,
+      "updateRule": "@request.auth.id != ''",
+      "deleteRule": "@request.auth.role = 'super_admin'",
+      "options": {
+        "allowEmailAuth": false,
+        "allowOAuth2Auth": false,
+        "allowUsernameAuth": true,
+        "exceptEmailDomains": null,
+        "manageRule": null,
+        "minPasswordLength": 8,
+        "onlyVerified": false,
+        "requireEmail": false
+      }
+  },
+  {
+      "id": "col_wh_01",
+      "name": "warehouses",
+      "type": "base",
+      "system": false,
+      "schema": [
+        { "id": "fld_wh_name", "name": "name", "type": "text", "system": false, "required": true, "unique": true, "options": { "min": 1, "max": 120, "pattern": "" } }
+      ],
+      "indexes": [],
+      "listRule": "@request.auth.id != ''",
+      "viewRule": "@request.auth.id != ''",
+      "createRule": "@request.auth.role != ''",
+      "updateRule": "@request.auth.role != ''",
+      "deleteRule": "@request.auth.role = 'super_admin'",
+      "options": {}
+  },
+  {
+      "id": "col_drugs_01",
+      "name": "drugs",
+      "type": "base",
+      "system": false,
+      "schema": [
+        { "id": "fld_drug_name", "name": "name", "type": "text", "system": false, "required": true, "unique": true, "options": { "min": 1, "max": 255, "pattern": "" } },
+        { "id": "fld_drug_code", "name": "code", "type": "text", "system": false, "required": false, "unique": false, "options": { "min": 0, "max": 60, "pattern": "" } },
+        { "id": "fld_drug_desc", "name": "description", "type": "text", "system": false, "required": false, "unique": false, "options": { "min": 0, "max": 1000, "pattern": "" } },
+        { "id": "fld_drug_image", "name": "image", "type": "file", "system": false, "required": false, "unique": false, "options": { "maxSelect": 1, "maxSize": 524288, "mimeTypes": ["image/jpeg","image/png","image/webp","image/avif"], "thumbs": ["100x100","300x300"], "protected": false } }
+      ],
+      "indexes": ["CREATE UNIQUE INDEX idx_drugs_name ON drugs (name)"],
+      "listRule": "@request.auth.id != ''",
+      "viewRule": "@request.auth.id != ''",
+      "createRule": "@request.auth.role != ''",
+      "updateRule": "@request.auth.role != ''",
+      "deleteRule": "@request.auth.role != ''",
+      "options": {}
+  },
+  {
+      "id": "col_lots_01",
+      "name": "drug_lots",
+      "type": "base",
+      "system": false,
+      "schema": [
+        { "id": "fld_lot_drug", "name": "drug", "type": "relation", "system": false, "required": true, "unique": false, "options": { "collectionId": "col_drugs_01", "cascadeDelete": true, "minSelect": null, "maxSelect": 1, "displayFields": null } },
+        { "id": "fld_lot_number", "name": "lot_number", "type": "text", "system": false, "required": true, "unique": false, "options": { "min": 1, "max": 80, "pattern": "" } },
+        { "id": "fld_lot_expire", "name": "expire_date", "type": "date", "system": false, "required": true, "unique": false, "options": {} }
+      ],
+      "indexes": ["CREATE INDEX idx_lots_drug ON drug_lots (drug)", "CREATE UNIQUE INDEX idx_lots_unique ON drug_lots (drug, lot_number)"],
+      "listRule": "@request.auth.id != ''",
+      "viewRule": "@request.auth.id != ''",
+      "createRule": "@request.auth.role != ''",
+      "updateRule": "@request.auth.role != ''",
+      "deleteRule": "@request.auth.role != ''",
+      "options": {}
+  },
+  {
+      "id": "col_inv_01",
+      "name": "inventory",
+      "type": "base",
+      "system": false,
+      "schema": [
+        { "id": "fld_inv_wh", "name": "warehouse", "type": "relation", "system": false, "required": true, "unique": false, "options": { "collectionId": "col_wh_01", "cascadeDelete": false, "minSelect": null, "maxSelect": 1, "displayFields": null } },
+        { "id": "fld_inv_lot", "name": "drug_lot", "type": "relation", "system": false, "required": true, "unique": false, "options": { "collectionId": "col_lots_01", "cascadeDelete": true, "minSelect": null, "maxSelect": 1, "displayFields": null } },
+        { "id": "fld_inv_qty", "name": "quantity", "type": "number", "system": false, "required": true, "unique": false, "options": { "min": 0, "max": null } }
+      ],
+      "indexes": ["CREATE UNIQUE INDEX idx_inventory_unique ON inventory (warehouse, drug_lot)"],
+      "listRule": "@request.auth.id != ''",
+      "viewRule": "@request.auth.id != ''",
+      "createRule": "@request.auth.role != ''",
+      "updateRule": "@request.auth.role != ''",
+      "deleteRule": "@request.auth.role != ''",
+      "options": {}
+  },
+  {
+      "id": "col_receipts_01",
+      "name": "receipts",
+      "type": "base",
+      "system": false,
+      "schema": [
+        { "id": "fld_rec_wh", "name": "warehouse", "type": "relation", "system": false, "required": true, "unique": false, "options": { "collectionId": "col_wh_01", "cascadeDelete": false, "minSelect": null, "maxSelect": 1, "displayFields": null } },
+        { "id": "fld_rec_status", "name": "status", "type": "select", "system": false, "required": true, "unique": false, "options": { "maxSelect": 1, "values": ["draft","completed"] } },
+        { "id": "fld_rec_docdate", "name": "document_date", "type": "date", "system": false, "required": false, "unique": false, "options": {} }
+      ],
+      "indexes": [],
+      "listRule": "@request.auth.id != ''",
+      "viewRule": "@request.auth.id != ''",
+      "createRule": "@request.auth.role != ''",
+      "updateRule": "@request.auth.role != ''",
+      "deleteRule": "@request.auth.role != ''",
+      "options": {}
+  },
+  {
+      "id": "col_receipt_items_01",
+      "name": "receipt_items",
+      "type": "base",
+      "system": false,
+      "schema": [
+        { "id": "fld_rit_receipt", "name": "receipt", "type": "relation", "system": false, "required": true, "unique": false, "options": { "collectionId": "col_receipts_01", "cascadeDelete": true, "minSelect": null, "maxSelect": 1, "displayFields": null } },
+        { "id": "fld_rit_lot", "name": "drug_lot", "type": "relation", "system": false, "required": true, "unique": false, "options": { "collectionId": "col_lots_01", "cascadeDelete": false, "minSelect": null, "maxSelect": 1, "displayFields": null } },
+        { "id": "fld_rit_qty", "name": "quantity", "type": "number", "system": false, "required": true, "unique": false, "options": { "min": 0, "max": null } }
+      ],
+      "indexes": [],
+      "listRule": "@request.auth.id != ''",
+      "viewRule": "@request.auth.id != ''",
+      "createRule": "@request.auth.role != ''",
+      "updateRule": "@request.auth.role != ''",
+      "deleteRule": "@request.auth.role != ''",
+      "options": {}
+  },
+  {
+      "id": "col_transfers_01",
+      "name": "transfers",
+      "type": "base",
+      "system": false,
+      "schema": [
+        { "id": "fld_tr_src", "name": "source_wh", "type": "relation", "system": false, "required": true, "unique": false, "options": { "collectionId": "col_wh_01", "cascadeDelete": false, "minSelect": null, "maxSelect": 1, "displayFields": null } },
+        { "id": "fld_tr_tgt", "name": "target_wh", "type": "relation", "system": false, "required": true, "unique": false, "options": { "collectionId": "col_wh_01", "cascadeDelete": false, "minSelect": null, "maxSelect": 1, "displayFields": null } },
+        { "id": "fld_tr_status", "name": "status", "type": "select", "system": false, "required": true, "unique": false, "options": { "maxSelect": 1, "values": ["draft","completed"] } },
+        { "id": "fld_tr_docdate", "name": "document_date", "type": "date", "system": false, "required": false, "unique": false, "options": {} }
+      ],
+      "indexes": [],
+      "listRule": "@request.auth.id != ''",
+      "viewRule": "@request.auth.id != ''",
+      "createRule": "@request.auth.role != ''",
+      "updateRule": "@request.auth.role != ''",
+      "deleteRule": "@request.auth.role != ''",
+      "options": {}
+  },
+  {
+      "id": "col_transfer_items_01",
+      "name": "transfer_items",
+      "type": "base",
+      "system": false,
+      "schema": [
+        { "id": "fld_tit_transfer", "name": "transfer", "type": "relation", "system": false, "required": true, "unique": false, "options": { "collectionId": "col_transfers_01", "cascadeDelete": true, "minSelect": null, "maxSelect": 1, "displayFields": null } },
+        { "id": "fld_tit_lot", "name": "drug_lot", "type": "relation", "system": false, "required": true, "unique": false, "options": { "collectionId": "col_lots_01", "cascadeDelete": false, "minSelect": null, "maxSelect": 1, "displayFields": null } },
+        { "id": "fld_tit_qty", "name": "quantity", "type": "number", "system": false, "required": true, "unique": false, "options": { "min": 0, "max": null } }
+      ],
+      "indexes": [],
+      "listRule": "@request.auth.id != ''",
+      "viewRule": "@request.auth.id != ''",
+      "createRule": "@request.auth.role != ''",
+      "updateRule": "@request.auth.role != ''",
+      "deleteRule": "@request.auth.role != ''",
+      "options": {}
+  }
+]
