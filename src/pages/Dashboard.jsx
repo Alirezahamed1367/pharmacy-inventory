@@ -27,11 +27,12 @@ import {
 } from '@mui/icons-material'
 import { useNavigate } from 'react-router-dom'
 import backendProvider from '../services/backendProvider'
-const { getInventory, getDrugs, getWarehouses, createReceipt, createTransfer, getReceipts: apiGetReceipts, getTransfers: apiGetTransfers, isApiConfigured } = backendProvider
 import Skeleton from '@mui/material/Skeleton'
 import { calcBackoff, wait } from '../utils/networkUtils'
 import dayjs from 'dayjs'
 import 'dayjs/locale/fa'
+
+const { getInventory, getDrugs, getWarehouses, createReceipt, createTransfer, getReceipts: apiGetReceipts, getTransfers: apiGetTransfers, isApiConfigured } = backendProvider
 
 dayjs.locale('fa')
 
