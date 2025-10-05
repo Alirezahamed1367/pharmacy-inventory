@@ -1,0 +1,17 @@
+﻿FROM alpine:latest
+
+RUN apk add --no-cache curl unzip ca-certificates
+
+WORKDIR /app
+
+RUN curl -L https://github.com/pocketbase/pocketbase/releases/download/v0.30.1/pocketbase_0.30.1_linux_amd64.zip -o pb.zip
+RUN unzip pb.zip
+RUN rm pb.zip
+RUN chmod +x pocketbase
+
+COPY pocketbase_schema.json* ./
+RUN mkdir -p pb_data
+
+EXPOSE 8090
+
+CMD ["./pocketbase", "serve", "--http=0.0.0.0:8090"]

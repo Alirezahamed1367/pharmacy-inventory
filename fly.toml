@@ -1,0 +1,19 @@
+﻿app = "pharmacy-inventory-pb"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile.pocketbase"
+
+[http_service]
+  internal_port = 8090
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+[env]
+  PORT = "8090"
+
+[mounts]
+  source = "pb_data"
+  destination = "/app/pb_data"
