@@ -23,7 +23,7 @@ COPY pocketbase_schema.json* ./
 RUN mkdir -p pb_data && chmod 755 pb_data
 
 # Verify PocketBase executable
-RUN echo "Final verification:" && ls -la /app/pocketbase && file /app/pocketbase
+RUN echo "Final verification:" && ls -la /app/pocketbase
 
 EXPOSE 8090
 
