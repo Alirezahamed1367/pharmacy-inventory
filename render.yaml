@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: pharmacy-inventory-pb
+    env: docker
+    dockerfilePath: ./Dockerfile.pocketbase
+    plan: free
+    region: frankfurt
+    buildCommand: ""
+    startCommand: ""
+    envVars:
+      - key: PORT
+        value: 8090
