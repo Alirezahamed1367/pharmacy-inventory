@@ -4,14 +4,20 @@ RUN apk add --no-cache curl unzip ca-certificates
 
 WORKDIR /app
 
-RUN curl -L https://github.com/pocketbase/pocketbase/releases/download/v0.30.1/pocketbase_0.30.1_linux_amd64.zip -o pb.zip
-RUN unzip pb.zip
-RUN rm pb.zip
-RUN chmod +x pocketbase
+# Download and extract PocketBase
+RUN curl -L https://github.com/pocketbase/pocketbase/releases/download/v0.30.1/pocketbase_0.30.1_linux_amd64.zip -o pb.zip && \
+    unzip pb.zip && \
+    rm pb.zip && \
+    chmod +x pocketbase && \
+    ls -la /app/
 
+# Copy schema if exists
 COPY pocketbase_schema.json* ./
+
+# Create data directory
 RUN mkdir -p pb_data
 
 EXPOSE 8090
 
-CMD ["./pocketbase", "serve", "--http=0.0.0.0:8090"]
+# Run PocketBase
+CMD ["./pocketbase", "serve", "--http=0.0.0.0:8090", "--publicDir=/app/pb_public"]
